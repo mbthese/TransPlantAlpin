@@ -955,6 +955,7 @@ NA,"Acer pentaphyllum","Acer pentaphyllum","Acer","Sapindaceae",NA,NA,NA,10,NA,N
 26264,"Acer sterculiaceum","Acer sterculiaceum","Acer","Sapindaceae",NA,NA,NA,20,98,0.35,NA
 26264,"Acer sterculiaceum","Acer sterculiaceum","Acer","Sapindaceae",NA,NA,NA,20,98,0.35,NA
 26264,"Acer sterculiaceum","Acer sterculiaceum","Acer","Sapindaceae",NA,NA,NA,20,98,0.35,NA
+26264,"Acer sterculiaceum","Acer sterculiaceum","Acer","Sapindaceae",NA,NA,NA,20,98,0.35,NA
 26307,"Acer sterculiaceum subsp. franchetii",NA,NA,NA,NA,NA,NA,16.6,NA,NA,NA
 26336,"Acer sterculiaceum subsp. thomsonii",NA,NA,NA,NA,NA,NA,20,NA,NA,NA
 26351,"Acer sutchuenense","Acer sutchuenense","Acer","Sapindaceae",NA,NA,NA,8,NA,NA,NA
@@ -975,6 +976,7 @@ NA,"Acer tataricum subsp. semenovii",NA,NA,NA,NA,NA,NA,5,NA,NA,NA
 26812,"Acer tschonoskii","Acer tschonoskii","Acer","Sapindaceae",NA,NA,NA,NA,16.55,NA,NA
 26996,"Acer tschonoskii subsp. koreanum",NA,NA,NA,NA,NA,NA,5,NA,NA,NA
 27053,"Acer tutcheri","Acer tutcheri","Acer","Sapindaceae",NA,NA,NA,10,NA,NA,NA
+27059,"Acer velutinum","Acer velutinum","Acer","Sapindaceae",NA,NA,NA,30,125,NA,NA
 27059,"Acer velutinum","Acer velutinum","Acer","Sapindaceae",NA,NA,NA,30,125,NA,NA
 27111,"Acer wangchii","Acer wangchii","Acer","Sapindaceae",NA,NA,NA,15,NA,NA,NA
 27119,"Acer wardii","Acer wardii","Acer","Sapindaceae",NA,NA,NA,13,NA,NA,NA
@@ -2196,7 +2198,7 @@ NA,"Allamanda schottii","Allamanda schottii","Allamanda","Apocynaceae",NA,NA,NA,
 55399,"Allium oporinanthum","Allium oporinanthum","Allium","Amaryllidaceae",NA,NA,NA,0.387,NA,NA,NA
 55432,"Allium oreoprasum","Allium oreoprasum","Allium","Amaryllidaceae",NA,NA,NA,NA,2.98,NA,NA
 55440,"Allium palentinum","Allium palentinum","Allium","Amaryllidaceae",391.9,41.25,88.284,0.128,NA,NA,NA
-55452,"Allium pallens","Allium pallens","Allium","Amaryllidaceae",NA,NA,NA,NA,1.62,NA,NA
+55452,"Allium pallens",NA,NA,NA,NA,NA,NA,NA,1.62,NA,NA
 55457,"Allium paniculatum","Allium paniculatum","Allium","Amaryllidaceae",NA,NA,NA,0.5,1.349,NA,NA
 55465,"Allium paradoxum","Allium paradoxum","Allium","Amaryllidaceae",3052,NA,23.315,0.332,NA,NA,NA
 55468,"Allium pendulinum","Allium pendulinum","Allium","Amaryllidaceae",1168.54,NA,16.763,0.234,NA,NA,NA
@@ -3017,7 +3019,7 @@ NA,"Anchusa ochroleuca","Anchusa ochroleuca","Anchusa","Boraginaceae",NA,NA,NA,0
 14084,"Andropogon glomeratus","Andropogon glomeratus","Andropogon","Poaceae",NA,15.3,NA,1.92,0.902,NA,NA
 14090,"Andropogon hallii","Andropogon hallii","Andropogon","Poaceae",NA,10.798,NA,1.85,3.713,NA,NA
 14150,"Andropogon lacunosus","Andropogon lacunosus","Andropogon","Poaceae",NA,NA,NA,0.4,NA,NA,NA
-14156,"Andropogon lateralis","Andropogon lateralis","Andropogon","Poaceae",NA,NA,NA,0.196,NA,NA,NA
+14156,"Andropogon lateralis",NA,NA,NA,NA,NA,NA,0.196,NA,NA,NA
 14198,"Andropogon leucostachyus","Andropogon leucostachyus","Andropogon","Poaceae",NA,NA,NA,0.288,NA,NA,NA
 23292,"Andropogon ligulatus","Andropogon ligulatus","Andropogon","Poaceae",NA,NA,NA,1.2,NA,NA,NA
 14217,"Andropogon lima","Andropogon lima","Andropogon","Poaceae",NA,NA,NA,1,NA,NA,NA
@@ -8361,7 +8363,6 @@ NA,"Carex laxiculmis","Carex laxiculmis","Carex","Cyperaceae",NA,NA,NA,0.55,1.63
 86859,"Carphalea kirondron",NA,NA,NA,NA,NA,NA,NA,5.95,NA,NA
 1611,"Carphalea madagascariensis","Carphalea madagascariensis","Carphalea","Rubiaceae",NA,NA,NA,NA,2.77,NA,NA
 65328,"Carphephorus paniculatus","Carphephorus paniculatus","Carphephorus","Asteraceae",NA,NA,NA,0.91,3.1,NA,NA
-65328,"Carphephorus paniculatus","Carphephorus paniculatus","Carphephorus","Asteraceae",NA,NA,NA,0.91,3.1,NA,NA
 1626,"Carphochaete wislizeni","Carphochaete wislizeni","Carphochaete","Asteraceae",NA,NA,NA,NA,1.2,NA,NA
 17349,"Carpinus betulus","Carpinus betulus","Carpinus","Betulaceae",2191.45,21.134,51.024,16.718,36.46,0.628,NA
 1634,"Carpinus caroliniana","Carpinus caroliniana","Carpinus","Betulaceae",1272.95,19.669,36.463,8.909,19.996,0.72,NA
@@ -8400,6 +8401,7 @@ NA,"Carex laxiculmis","Carex laxiculmis","Carex","Cyperaceae",NA,NA,NA,0.55,1.63
 2271,"Carpinus turczaninowii","Carpinus turczaninowii","Carpinus","Betulaceae",NA,21.982,NA,13.693,8.97,NA,NA
 2262,"Carpinus viminea","Carpinus viminea","Carpinus","Betulaceae",NA,NA,NA,17.321,NA,NA,NA
 2276,"Carpobrotus acinaciformis","Carpobrotus acinaciformis","Carpobrotus","Aizoaceae",NA,14.8,NA,0.2,NA,NA,NA
+2278,"Carpobrotus chilensis","Carpobrotus chilensis","Carpobrotus","Aizoaceae",NA,NA,NA,NA,0.34,NA,NA
 2278,"Carpobrotus chilensis","Carpobrotus chilensis","Carpobrotus","Aizoaceae",NA,NA,NA,NA,0.34,NA,NA
 2362,"Carpobrotus dimidiatus","Carpobrotus dimidiatus","Carpobrotus","Aizoaceae",NA,NA,NA,NA,0.43,NA,NA
 2378,"Carpobrotus edulis","Carpobrotus edulis","Carpobrotus","Aizoaceae",3162,NA,NA,0.2,NA,NA,NA
@@ -8552,7 +8554,6 @@ NA,"Carex laxiculmis","Carex laxiculmis","Carex","Cyperaceae",NA,NA,NA,0.55,1.63
 4543,"Cassia fastuosa","Cassia fastuosa","Cassia","Fabaceae",NA,NA,NA,NA,NA,0.799,NA
 75236,"Cassia ferruginea","Cassia ferruginea","Cassia","Fabaceae",NA,NA,NA,NA,262.75,0.784,NA
 75238,"Cassia fistula","Cassia fistula","Cassia","Fabaceae",NA,22.897,65.769,22,370.185,0.773,NA
-4584,"Cassia grandis","Cassia grandis","Cassia","Fabaceae",NA,NA,NA,30,344.001,NA,NA
 4584,"Cassia grandis","Cassia grandis","Cassia","Fabaceae",NA,NA,NA,30,344.001,NA,NA
 4587,"Cassia helmsii",NA,NA,NA,NA,NA,NA,2,28.19,NA,NA
 4594,"Cassia italica",NA,NA,NA,NA,17.2,NA,NA,22.72,NA,NA
@@ -9203,6 +9204,7 @@ NA,"Cedrela tonduzii","Cedrela tonduzii","Cedrela","Meliaceae",NA,NA,NA,NA,NA,0.
 15064,"Cephalaria syriaca","Cephalaria syriaca","Cephalaria","Caprifoliaceae",NA,NA,NA,NA,10.38,NA,NA
 15070,"Cephalaria transsylvanica","Cephalaria transsylvanica","Cephalaria","Caprifoliaceae",NA,NA,NA,0.509,NA,NA,NA
 64383,"Cephalaria transylvanica","Cephalaria transylvanica","Cephalaria","Caprifoliaceae",NA,NA,NA,NA,20.2,NA,NA
+64383,"Cephalaria transylvanica","Cephalaria transylvanica","Cephalaria","Caprifoliaceae",NA,NA,NA,NA,20.2,NA,NA
 15082,"Cephalaria zeyheriana","Cephalaria zeyheriana","Cephalaria","Caprifoliaceae",NA,NA,NA,NA,7.36,NA,NA
 15096,"Cephalipterum drummondii","Cephalipterum drummondii","Cephalipterum","Asteraceae",NA,NA,NA,0.25,7.22,NA,NA
 15102,"Cephaloceraton histrix",NA,NA,NA,NA,NA,NA,0.069,NA,NA,NA
@@ -9403,7 +9405,6 @@ NA,"Cereus jamacaru","Cereus jamacaru","Cereus","Cactaceae",NA,11.628,NA,NA,NA,N
 18856,"Chaetocarpus echinocarpus","Chaetocarpus echinocarpus","Chaetocarpus","Peraceae",700,NA,NA,NA,NA,NA,NA
 18858,"Chaetocarpus globosus","Chaetocarpus globosus","Chaetocarpus","Peraceae",NA,10.2,227.273,NA,NA,NA,NA
 54728,"Chaetocarpus schomburgkianus","Chaetocarpus schomburgkianus","Chaetocarpus","Peraceae",5339.19,12.871,167.026,17.903,73.218,0.8,NA
-18901,"Chaetopappa asteroides","Chaetopappa asteroides","Chaetopappa","Asteraceae",NA,NA,NA,0.17,0.23,NA,NA
 18901,"Chaetopappa asteroides","Chaetopappa asteroides","Chaetopappa","Asteraceae",NA,NA,NA,0.17,0.23,NA,NA
 60781,"Chaetopappa ericoides","Chaetopappa ericoides","Chaetopappa","Asteraceae",8,17.25,59.172,0.11,0.268,0.232,0.26
 18922,"Chaetosciadium trichospermum","Chaetosciadium trichospermum","Chaetosciadium","Apiaceae",NA,NA,NA,NA,0.95,NA,NA
@@ -10034,7 +10035,7 @@ NA,"Chisocheton patens","Chisocheton patens","Chisocheton","Meliaceae",5227.04,N
 68722,"Cirsium eriophorum","Cirsium eriophorum","Cirsium","Asteraceae",10538,NA,73.614,1.278,6.144,0.19,0.18
 30718,"Cirsium erisithales","Cirsium erisithales","Cirsium","Asteraceae",20826.01,32.682,46.665,0.954,NA,0.174,0.149
 30766,"Cirsium esculentum","Cirsium esculentum","Cirsium","Asteraceae",NA,17.74,NA,NA,NA,NA,NA
-30780,"Cirsium ferox",NA,NA,NA,NA,NA,NA,0.568,NA,NA,NA
+30780,"Cirsium ferox","Cirsium ferox","Cirsium","Asteraceae",NA,NA,NA,0.568,NA,NA,NA
 30754,"Cirsium foliosum","Cirsium foliosum","Cirsium","Asteraceae",NA,NA,NA,1.21,3.01,NA,NA
 30808,"Cirsium furiens","Cirsium furiens","Cirsium","Asteraceae",NA,NA,NA,1.5,NA,NA,NA
 30816,"Cirsium helenioides","Cirsium helenioides","Cirsium","Asteraceae",12024.34,NA,37.879,0.749,1.78,0.148,0.1
@@ -10413,7 +10414,6 @@ NA,"Clarkia rhomboidea","Clarkia rhomboidea","Clarkia","Onagraceae",NA,NA,NA,NA,
 36557,"Cleome suffruticosa","Cleome suffruticosa","Cleome","Cleomaceae",NA,NA,NA,0.4,1.159,NA,NA
 69640,"Cleome tenuis","Cleome tenuis","Cleome","Cleomaceae",NA,NA,NA,NA,1.315,NA,NA
 36562,"Cleome tetrandra","Cleome tetrandra","Cleome","Cleomaceae",NA,NA,NA,NA,0.9,NA,NA
-36565,"Cleome usambarica","Cleome usambarica","Cleome","Cleomaceae",NA,NA,NA,NA,0.86,NA,NA
 36565,"Cleome usambarica","Cleome usambarica","Cleome","Cleomaceae",NA,NA,NA,NA,0.86,NA,NA
 36565,"Cleome usambarica","Cleome usambarica","Cleome","Cleomaceae",NA,NA,NA,NA,0.86,NA,NA
 69643,"Cleome viscosa","Cleome viscosa","Cleome","Cleomaceae",NA,NA,NA,0.9,1.082,NA,NA
@@ -13387,6 +13387,7 @@ NA,"Dalea leporina","Dalea leporina","Dalea","Fabaceae",NA,30.85,62.7,NA,2.614,N
 11250,"Daphne petraea","Daphne petraea","Daphne","Thymelaeaceae",NA,NA,NA,0.062,NA,NA,NA
 11253,"Daphne pontica","Daphne pontica","Daphne","Thymelaeaceae",NA,NA,NA,0.447,514,NA,NA
 11258,"Daphne rosmarinifolia","Daphne rosmarinifolia","Daphne","Thymelaeaceae",NA,NA,NA,1,NA,NA,NA
+11258,"Daphne rosmarinifolia","Daphne rosmarinifolia","Daphne","Thymelaeaceae",NA,NA,NA,1,NA,NA,NA
 11274,"Daphne sericea","Daphne sericea","Daphne","Thymelaeaceae",NA,NA,NA,0.3,9.92,NA,NA
 11276,"Daphne striata","Daphne striata","Daphne","Thymelaeaceae",26.05,NA,63.205,0.197,35,NA,NA
 11278,"Daphne tangutica","Daphne tangutica","Daphne","Thymelaeaceae",NA,NA,NA,1.733,NA,NA,NA
@@ -13633,7 +13634,7 @@ NA,"Dendrobium speciosum","Dendrobium speciosum","Dendrobium","Orchidaceae",2381
 13331,"Dendrocnide moroidea",NA,NA,NA,NA,NA,52.002,5.67,0.708,NA,NA
 13108,"Dendrocnide photiniphylla","Dendrocnide photiniphylla","Dendrocnide","Urticaceae",NA,NA,NA,NA,0.52,0.2,NA
 6029,"Dendrocnide sinuata","Dendrocnide sinuata","Dendrocnide","Urticaceae",22814.66,NA,NA,5,NA,NA,NA
-66697,"Dendrocnide stimulans","Dendrocnide stimulans","Dendrocnide","Urticaceae",25739,NA,NA,9,NA,NA,NA
+66697,"Dendrocnide stimulans",NA,NA,NA,25739,NA,NA,9,NA,NA,NA
 13370,"Dendrocnide urentissima","Dendrocnide urentissima","Dendrocnide","Urticaceae",NA,NA,NA,15,NA,NA,NA
 13372,"Dendrolobium lanceolatum","Dendrolobium lanceolatum","Dendrolobium","Fabaceae",NA,NA,NA,3,NA,NA,NA
 66699,"Dendrolobium triangulare","Dendrolobium triangulare","Dendrolobium","Fabaceae",NA,NA,NA,2,NA,NA,NA
@@ -16035,7 +16036,6 @@ NA,"Eperua falcata","Eperua falcata","Eperua","Fabaceae",3299.63,16.305,79.483,2
 29938,"Ephedra distachya","Ephedra distachya","Ephedra","Ephedraceae",NA,21.708,154.499,0.243,3.638,NA,NA
 29939,"Ephedra distachya subsp. helvetica",NA,NA,NA,NA,NA,NA,0.327,NA,NA,NA
 68615,"Ephedra equisetina","Ephedra equisetina","Ephedra","Ephedraceae",NA,NA,NA,1.145,NA,NA,NA
-68615,"Ephedra equisetina","Ephedra equisetina","Ephedra","Ephedraceae",NA,NA,NA,1.145,NA,NA,NA
 29956,"Ephedra fedtschenkoae","Ephedra fedtschenkoae","Ephedra","Ephedraceae",NA,NA,NA,0.15,NA,NA,NA
 29957,"Ephedra foeminea","Ephedra foeminea","Ephedra","Ephedraceae",NA,NA,NA,4,NA,NA,NA
 29959,"Ephedra fragilis","Ephedra fragilis","Ephedra","Ephedraceae",NA,NA,NA,1.75,NA,NA,NA
@@ -16875,6 +16875,7 @@ NA,"Eriastrum densifolium","Eriastrum densifolium","Eriastrum","Polemoniaceae",N
 35388,"Erodium ciconium","Erodium ciconium","Erodium","Geraniaceae",NA,30.038,50.323,0.255,1.93,0.129,NA
 35389,"Erodium cicutarium","Erodium cicutarium","Erodium","Geraniaceae",220.59,27.493,44.602,0.108,1.706,0.204,0.198
 35413,"Erodium crinitum","Erodium crinitum","Erodium","Geraniaceae",47,NA,62.5,0.9,2.815,NA,NA
+35426,"Erodium cygnorum","Erodium cygnorum","Erodium","Geraniaceae",NA,NA,NA,NA,4.62,NA,NA
 35426,"Erodium cygnorum","Erodium cygnorum","Erodium","Geraniaceae",NA,NA,NA,NA,4.62,NA,NA
 35434,"Erodium glaucophyllum","Erodium glaucophyllum","Erodium","Geraniaceae",276.1,23.519,116.707,0.331,1.38,0.201,0.201
 35438,"Erodium gruinum","Erodium gruinum","Erodium","Geraniaceae",NA,NA,NA,0.4,37.382,NA,NA
@@ -18177,6 +18178,7 @@ NA,"Euphorbia ingens","Euphorbia ingens","Euphorbia","Euphorbiaceae",NA,NA,NA,8.
 44413,"Euphorbia lividiflora","Euphorbia lividiflora","Euphorbia","Euphorbiaceae",NA,NA,NA,6.325,NA,NA,NA
 44315,"Euphorbia lomelii","Euphorbia lomelii","Euphorbia","Euphorbiaceae",NA,NA,NA,NA,96,NA,NA
 44416,"Euphorbia luapulana","Euphorbia luapulana","Euphorbia","Euphorbiaceae",NA,NA,NA,1,NA,NA,NA
+44416,"Euphorbia luapulana","Euphorbia luapulana","Euphorbia","Euphorbiaceae",NA,NA,NA,1,NA,NA,NA
 44424,"Euphorbia lucida","Euphorbia lucida","Euphorbia","Euphorbiaceae",NA,NA,NA,0.762,5.403,NA,NA
 44425,"Euphorbia lucorum","Euphorbia lucorum","Euphorbia","Euphorbiaceae",NA,NA,17.773,0.8,NA,NA,NA
 NA,"Euphorbia lupatensis","Euphorbia lupatensis","Euphorbia","Euphorbiaceae",NA,NA,NA,0.3,NA,NA,NA
@@ -18947,7 +18949,7 @@ NA,"Festuca violacea","Festuca violacea","Festuca","Poaceae",NA,NA,128.205,0.304
 65786,"Ficus retusa","Ficus retusa","Ficus","Moraceae",NA,NA,NA,NA,25,0.54,NA
 49742,"Ficus ribes","Ficus ribes","Ficus","Moraceae",9050,NA,NA,16.089,NA,0.37,NA
 5206,"Ficus rigida",NA,NA,NA,NA,NA,NA,NA,NA,0.43,NA
-49745,"Ficus rubiginosa","Ficus rubiginosa","Ficus","Moraceae",NA,NA,NA,30,0.399,NA,NA
+49745,"Ficus rubiginosa",NA,NA,NA,NA,NA,NA,30,0.399,NA,NA
 49753,"Ficus rubra","Ficus rubra","Ficus","Moraceae",17.72,NA,97.869,NA,NA,NA,NA
 49760,"Ficus rumphii","Ficus rumphii","Ficus","Moraceae",NA,15.5,79.114,NA,NA,0.399,NA
 49763,"Ficus sagittata","Ficus sagittata","Ficus","Moraceae",3471.09,NA,NA,16.599,NA,NA,NA
@@ -19536,7 +19538,7 @@ NA,"Forsythia mandschurica",NA,NA,NA,NA,NA,NA,1.5,NA,NA,NA
 53529,"Galium timeroyi","Galium timeroyi","Galium","Rubiaceae",NA,NA,NA,0.229,NA,NA,NA
 53559,"Galium tinctorium","Galium tinctorium","Galium","Rubiaceae",NA,NA,NA,0.24,1.862,NA,NA
 60957,"Galium trichocarpum","Galium trichocarpum","Galium","Rubiaceae",NA,NA,NA,NA,0.53,NA,NA
-53566,"Galium tricornutum",NA,NA,NA,97.25,NA,44.603,0.352,10.49,0.201,0.2
+53566,"Galium tricornutum","Galium tricornutum","Galium","Rubiaceae",97.25,NA,44.603,0.352,10.49,0.201,0.2
 53567,"Galium trifidum","Galium trifidum","Galium","Rubiaceae",NA,NA,NA,0.24,0.469,NA,NA
 53581,"Galium triflorum","Galium triflorum","Galium","Rubiaceae",NA,19.051,28,NA,0.732,NA,NA
 53583,"Galium uliginosum","Galium uliginosum","Galium","Rubiaceae",47.83,17.26,32.43,0.27,0.093,0.23,NA
@@ -26343,6 +26345,7 @@ NA,"Lathyrus pallescens","Lathyrus pallescens","Lathyrus","Fabaceae",NA,NA,NA,NA
 66811,"Lindera queenslandica","Lindera queenslandica","Lindera","Lauraceae",NA,NA,NA,NA,281.15,NA,NA
 14128,"Lindera robusta","Lindera robusta","Lindera","Lauraceae",NA,NA,NA,10,NA,NA,NA
 62601,"Lindera rubronervia","Lindera rubronervia","Lindera","Lauraceae",NA,NA,NA,5,NA,NA,NA
+62601,"Lindera rubronervia","Lindera rubronervia","Lindera","Lauraceae",NA,NA,NA,5,NA,NA,NA
 14130,"Lindera setchuenensis","Lindera setchuenensis","Lindera","Lauraceae",NA,NA,NA,2.5,NA,NA,NA
 66812,"Lindera supracostata","Lindera supracostata","Lindera","Lauraceae",NA,NA,NA,15,NA,NA,NA
 14134,"Lindera thomsonii","Lindera thomsonii","Lindera","Lauraceae",NA,NA,NA,10,NA,NA,NA
@@ -26770,6 +26773,7 @@ NA,"Lithocarpus hystrix","Lithocarpus hystrix","Lithocarpus","Fagaceae",9050,NA,
 66945,"Lobelia purpurascens","Lobelia purpurascens","Lobelia","Campanulaceae",48.01,NA,28.019,0.05,0.15,NA,NA
 66946,"Lobelia quarreana","Lobelia quarreana","Lobelia","Campanulaceae",NA,NA,NA,0.141,NA,NA,NA
 15001,"Lobelia sapinii","Lobelia sapinii","Lobelia","Campanulaceae",NA,NA,NA,0.179,NA,NA,NA
+15002,"Lobelia scaevolifolia","Lobelia scaevolifolia","Lobelia","Campanulaceae",NA,NA,NA,NA,0.04,NA,NA
 15002,"Lobelia scaevolifolia","Lobelia scaevolifolia","Lobelia","Campanulaceae",NA,NA,NA,NA,0.04,NA,NA
 15006,"Lobelia seguinii","Lobelia seguinii","Lobelia","Campanulaceae",NA,NA,NA,NA,0.01,NA,NA
 66948,"Lobelia sessilifolia","Lobelia sessilifolia","Lobelia","Campanulaceae",NA,NA,NA,NA,0.163,NA,NA
@@ -28794,7 +28798,6 @@ NA,"Lithocarpus hystrix","Lithocarpus hystrix","Lithocarpus","Fagaceae",9050,NA,
 19321,"Melicope lunu-ankenda","Melicope lunu-ankenda","Melicope","Rutaceae",NA,NA,NA,NA,5.1,0.407,NA
 19322,"Melicope macrocarpa","Melicope macrocarpa","Melicope","Rutaceae",9050,NA,NA,12,NA,NA,NA
 81771,"Melicope micrococca","Melicope micrococca","Melicope","Rutaceae",NA,NA,44.838,NA,4.635,0.503,NA
-81771,"Melicope micrococca","Melicope micrococca","Melicope","Rutaceae",NA,NA,44.838,NA,4.635,0.503,NA
 19326,"Melicope pahangensis","Melicope pahangensis","Melicope","Rutaceae",NA,NA,NA,5,NA,NA,NA
 19331,"Melicope patulinervia","Melicope patulinervia","Melicope","Rutaceae",NA,NA,NA,3,NA,NA,NA
 19333,"Melicope peduncularis","Melicope peduncularis","Melicope","Rutaceae",NA,15.4,246.914,NA,NA,NA,NA
@@ -29671,7 +29674,7 @@ NA,"Lithocarpus hystrix","Lithocarpus hystrix","Lithocarpus","Fagaceae",9050,NA,
 21590,"Momordica repens","Momordica repens","Momordica","Cucurbitaceae",NA,NA,NA,NA,1039.44,NA,NA
 21591,"Momordica trifoliolata","Momordica trifoliolata","Momordica","Cucurbitaceae",NA,NA,NA,NA,172.96,NA,NA
 67654,"Momordica welwitschii","Momordica welwitschii","Momordica","Cucurbitaceae",NA,NA,NA,NA,39.45,NA,NA
-67640,"Monachather paradoxus","Monachather paradoxus","Monachather","Poaceae",520,NA,136.24,0.6,1.445,NA,NA
+67640,"Monachather paradoxus",NA,NA,NA,520,NA,136.24,0.6,1.445,NA,NA
 67655,"Monadenium rugosum",NA,NA,NA,NA,NA,NA,0.5,NA,NA,NA
 67656,"Monanthes brachycaulos","Monanthes brachycaulos","Monanthes","Crassulaceae",NA,NA,NA,0.05,NA,NA,NA
 67657,"Monanthes pallens","Monanthes pallens","Monanthes","Crassulaceae",NA,NA,NA,0.05,NA,NA,NA
@@ -29781,6 +29784,7 @@ NA,"Lithocarpus hystrix","Lithocarpus hystrix","Lithocarpus","Fagaceae",9050,NA,
 21758,"Moraea bella","Moraea bella","Moraea","Iridaceae",NA,NA,NA,0.438,NA,NA,NA
 21759,"Moraea bellendenii","Moraea bellendenii","Moraea","Iridaceae",NA,NA,NA,NA,0.73,NA,NA
 67697,"Moraea brevifolia","Moraea brevifolia","Moraea","Iridaceae",NA,NA,NA,0.316,NA,NA,NA
+21760,"Moraea carsonii","Moraea carsonii","Moraea","Iridaceae",NA,NA,NA,0.283,NA,NA,NA
 21760,"Moraea carsonii","Moraea carsonii","Moraea","Iridaceae",NA,NA,NA,0.283,NA,NA,NA
 67698,"Moraea clavata","Moraea clavata","Moraea","Iridaceae",NA,NA,NA,0.229,NA,NA,NA
 21762,"Moraea collina","Moraea collina","Moraea","Iridaceae",NA,NA,NA,NA,0.895,NA,NA
@@ -29983,7 +29987,7 @@ NA,"Lithocarpus hystrix","Lithocarpus hystrix","Lithocarpus","Fagaceae",9050,NA,
 22090,"Mulinum spinosum",NA,NA,NA,75,NA,175.439,0.621,5.44,0.36,NA
 22097,"Multidentia concrescens","Multidentia concrescens","Multidentia","Rubiaceae",NA,NA,NA,0.154,NA,NA,NA
 22099,"Multidentia crassa","Multidentia crassa","Multidentia","Rubiaceae",NA,NA,NA,1.897,NA,NA,NA
-22101,"Multidentia exserta","Multidentia exserta","Multidentia","Rubiaceae",NA,NA,NA,2.646,NA,NA,NA
+22101,"Multidentia exserta",NA,NA,NA,NA,NA,NA,2.646,NA,NA,NA
 22102,"Multidentia fanshawei","Multidentia fanshawei","Multidentia","Rubiaceae",NA,NA,NA,6.76,NA,NA,NA
 22105,"Multidentia sclerocarpa","Multidentia sclerocarpa","Multidentia","Rubiaceae",NA,NA,NA,NA,418.4,NA,NA
 65255,"Mundulea antanossarum","Mundulea antanossarum","Mundulea","Fabaceae",NA,NA,NA,NA,16.52,NA,NA
@@ -30642,7 +30646,7 @@ NA,"Nenax acerosa","Nenax acerosa","Nenax","Rubiaceae",NA,NA,NA,NA,25.5,NA,NA
 37077,"Nerium oleander","Nerium oleander","Nerium","Apocynaceae",1981.39,12.915,198.182,3.262,3.491,0.6,NA
 23384,"Nertera balfouriana","Nertera balfouriana","Nertera","Rubiaceae",75,NA,NA,22.361,NA,NA,NA
 23385,"Nertera dichondrifolia","Nertera dichondrifolia","Nertera","Rubiaceae",72.3,NA,36.927,0.065,1.7,NA,NA
-23388,"Nertera granadensis",NA,NA,NA,144.57,13.309,34.557,0.082,2.448,NA,NA
+23388,"Nertera granadensis","Nertera granadensis","Nertera","Rubiaceae",144.57,13.309,34.557,0.082,2.448,NA,NA
 23389,"Nervilia adolphi","Nervilia adolphi","Nervilia","Orchidaceae",NA,NA,NA,0.064,NA,NA,NA
 23390,"Nervilia ballii","Nervilia ballii","Nervilia","Orchidaceae",NA,NA,NA,0.182,NA,NA,NA
 23391,"Nervilia bicarinata","Nervilia bicarinata","Nervilia","Orchidaceae",NA,NA,NA,0.357,NA,NA,NA
@@ -30954,7 +30958,7 @@ NA,"Nenax acerosa","Nenax acerosa","Nenax","Rubiaceae",NA,NA,NA,NA,25.5,NA,NA
 24064,"Ochna thomasiana","Ochna thomasiana","Ochna","Ochnaceae",NA,16.9,76.923,NA,NA,NA,NA
 67907,"Ochradenus arabicus","Ochradenus arabicus","Ochradenus","Resedaceae",NA,NA,NA,NA,0.76,NA,NA
 24065,"Ochradenus aucheri",NA,NA,NA,NA,NA,NA,NA,0.56,NA,NA
-67908,"Ochradenus baccatus","Ochradenus baccatus","Ochradenus","Resedaceae",NA,NA,NA,0.8,1.1,NA,NA
+67908,"Ochradenus baccatus",NA,NA,NA,NA,NA,NA,0.8,1.1,NA,NA
 67909,"Ochreinauclea maingayi","Ochreinauclea maingayi","Ochreinauclea","Rubiaceae",NA,NA,NA,NA,NA,0.54,NA
 24066,"Ochrocarpos acuminatus",NA,NA,NA,25739,NA,NA,25,NA,NA,NA
 24067,"Ochroma pyramidale","Ochroma pyramidale","Ochroma","Malvaceae",46443.72,25.87,87.244,28.984,8.553,0.153,NA
@@ -31873,6 +31877,7 @@ NA,"Opuntia stricta","Opuntia stricta","Opuntia","Cactaceae",NA,NA,NA,NA,21.92,N
 39545,"Ouratea discophora","Ouratea discophora","Ouratea","Ochnaceae",3000,11.6,NA,NA,NA,0.79,NA
 66320,"Ouratea guianensis","Ouratea guianensis","Ouratea","Ochnaceae",NA,NA,NA,NA,129.923,NA,NA
 84491,"Ouratea hexasperma","Ouratea hexasperma","Ouratea","Ochnaceae",NA,13.461,137.08,2.368,NA,0.429,NA
+84491,"Ouratea hexasperma","Ouratea hexasperma","Ouratea","Ochnaceae",NA,13.461,137.08,2.368,NA,0.429,NA
 68178,"Ouratea iquitosensis","Ouratea iquitosensis","Ouratea","Ochnaceae",9500,NA,NA,NA,NA,NA,NA
 26620,"Ouratea littoralis","Ouratea littoralis","Ouratea","Ochnaceae",NA,10.6,NA,NA,NA,NA,NA
 68180,"Ouratea lucens","Ouratea lucens","Ouratea","Ochnaceae",5045.07,13.902,108.055,10.61,120.11,0.805,NA
@@ -32023,6 +32028,7 @@ NA,"Opuntia stricta","Opuntia stricta","Opuntia","Cactaceae",NA,NA,NA,NA,21.92,N
 26964,"Ozoroa paniculosa","Ozoroa paniculosa","Ozoroa","Anacardiaceae",NA,NA,NA,1.342,139.069,NA,NA
 90520,"Ozoroa pulcherrima","Ozoroa pulcherrima","Ozoroa","Anacardiaceae",NA,NA,NA,NA,56.8,NA,NA
 36622,"Ozoroa pwetoensis","Ozoroa pwetoensis","Ozoroa","Anacardiaceae",NA,NA,NA,1.5,NA,NA,NA
+36622,"Ozoroa pwetoensis","Ozoroa pwetoensis","Ozoroa","Anacardiaceae",NA,NA,NA,1.5,NA,NA,NA
 26965,"Ozoroa schinzii","Ozoroa schinzii","Ozoroa","Anacardiaceae",NA,NA,NA,NA,76.56,NA,NA
 26978,"Ozoroa sphaerocarpa","Ozoroa sphaerocarpa","Ozoroa","Anacardiaceae",NA,NA,NA,7.5,199.94,NA,NA
 26967,"Ozoroa stenophylla","Ozoroa stenophylla","Ozoroa","Anacardiaceae",NA,NA,NA,1,NA,NA,NA
@@ -32072,7 +32078,7 @@ NA,"Opuntia stricta","Opuntia stricta","Opuntia","Cactaceae",NA,NA,NA,NA,21.92,N
 27025,"Pachycereus grandis","Pachycereus grandis","Pachycereus","Cactaceae",NA,NA,NA,NA,11.09,NA,NA
 27026,"Pachycereus pecten-aboriginum","Pachycereus pecten-aboriginum","Pachycereus","Cactaceae",NA,NA,NA,NA,12.6,NA,NA
 27027,"Pachycereus pringlei","Pachycereus pringlei","Pachycereus","Cactaceae",NA,NA,NA,NA,5,NA,NA
-68273,"Pachycereus weberi","Pachycereus weberi","Pachycereus","Cactaceae",NA,NA,NA,NA,4.68,NA,NA
+68273,"Pachycereus weberi",NA,NA,NA,NA,NA,NA,NA,4.68,NA,NA
 27028,"Pachycornia triandra","Pachycornia triandra","Pachycornia","Amaranthaceae",NA,NA,NA,NA,217.08,NA,NA
 68274,"Pachyelasma tessmannii","Pachyelasma tessmannii","Pachyelasma","Fabaceae",NA,NA,NA,NA,NA,0.73,NA
 27031,"Pachygone ovata","Pachygone ovata","Pachygone","Menispermaceae",5045,NA,NA,NA,NA,NA,NA
@@ -32162,7 +32168,6 @@ NA,"Packera quercetorum","Packera quercetorum","Packera","Asteraceae",NA,NA,NA,N
 27256,"Palaquium dasyphyllum","Palaquium dasyphyllum","Palaquium","Sapotaceae",8971.01,NA,NA,21.813,NA,0.505,NA
 68291,"Palaquium ellipticum","Palaquium ellipticum","Palaquium","Sapotaceae",NA,NA,NA,NA,2279.502,0.53,NA
 27271,"Palaquium eriocalyx","Palaquium eriocalyx","Palaquium","Sapotaceae",NA,NA,NA,NA,NA,0.38,NA
-27274,"Palaquium fidjiense","Palaquium fidjiense","Palaquium","Sapotaceae",NA,NA,NA,NA,NA,0.49,NA
 27274,"Palaquium fidjiense","Palaquium fidjiense","Palaquium","Sapotaceae",NA,NA,NA,NA,NA,0.49,NA
 27276,"Palaquium formosanum","Palaquium formosanum","Palaquium","Sapotaceae",NA,NA,NA,20,NA,NA,NA
 27278,"Palaquium galactoxylum","Palaquium galactoxylum","Palaquium","Sapotaceae",3019,NA,NA,23.202,NA,0.493,NA
@@ -32631,7 +32636,6 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 85506,"Paspalum paniculatum","Paspalum paniculatum","Paspalum","Poaceae",NA,NA,NA,NA,0.24,NA,NA
 85508,"Paspalum plicatulum","Paspalum plicatulum","Paspalum","Poaceae",NA,NA,NA,0.272,1.601,NA,NA
 85509,"Paspalum pubiflorum","Paspalum pubiflorum","Paspalum","Poaceae",NA,35.94,27.3,NA,3.09,NA,NA
-85509,"Paspalum pubiflorum","Paspalum pubiflorum","Paspalum","Poaceae",NA,35.94,27.3,NA,3.09,NA,NA
 28197,"Paspalum pumilum","Paspalum pumilum","Paspalum","Poaceae",NA,NA,NA,0.15,NA,NA,NA
 85511,"Paspalum quadrifarium","Paspalum quadrifarium","Paspalum","Poaceae",5729.57,9.976,367.571,1.044,0.2,0.28,0.313
 85514,"Paspalum repens","Paspalum repens","Paspalum","Poaceae",NA,NA,NA,0.76,2.76,NA,NA
@@ -32687,6 +32691,7 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 28342,"Paullinia alata","Paullinia alata","Paullinia","Sapindaceae",NA,NA,NA,NA,217.33,NA,NA
 68430,"Paullinia baileyi","Paullinia baileyi","Paullinia","Sapindaceae",NA,36.915,45.753,NA,70,0.31,NA
 28344,"Paullinia bracteosa","Paullinia bracteosa","Paullinia","Sapindaceae",NA,NA,65.876,NA,190.92,0.475,NA
+28348,"Paullinia caloptera","Paullinia caloptera","Paullinia","Sapindaceae",3000,NA,NA,NA,NA,NA,NA
 28348,"Paullinia caloptera","Paullinia caloptera","Paullinia","Sapindaceae",3000,NA,NA,NA,NA,NA,NA
 68432,"Paullinia cuneata","Paullinia cuneata","Paullinia","Sapindaceae",NA,NA,NA,NA,8.03,NA,NA
 85616,"Paullinia cururu","Paullinia cururu","Paullinia","Sapindaceae",NA,NA,30,NA,NA,NA,NA
@@ -33191,7 +33196,6 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 29558,"Pericallis cruenta","Pericallis cruenta","Pericallis","Asteraceae",NA,NA,NA,NA,0.19,NA,NA
 29694,"Pericallis echinata","Pericallis echinata","Pericallis","Asteraceae",NA,NA,NA,0.4,NA,NA,NA
 29560,"Pericallis webbii","Pericallis webbii","Pericallis","Asteraceae",NA,NA,NA,0.8,NA,NA,NA
-29560,"Pericallis webbii","Pericallis webbii","Pericallis","Asteraceae",NA,NA,NA,0.8,NA,NA,NA
 29561,"Pericalymma ellipticum","Pericalymma ellipticum","Pericalymma","Myrtaceae",NA,NA,NA,NA,0.26,NA,NA
 29563,"Pericampylus glaucus","Pericampylus glaucus","Pericampylus","Menispermaceae",6276.54,20.085,30.658,7.319,NA,NA,NA
 29563,"Pericampylus glaucus","Pericampylus glaucus","Pericampylus","Menispermaceae",6276.54,20.085,30.658,7.319,NA,NA,NA
@@ -33302,7 +33306,6 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 29729,"Persoonia gunnii","Persoonia gunnii","Persoonia","Proteaceae",NA,NA,NA,NA,119.366,NA,NA
 102035,"Persoonia isophylla","Persoonia isophylla","Persoonia","Proteaceae",13.85,NA,186.22,1.4,NA,NA,NA
 86467,"Persoonia juniperina","Persoonia juniperina","Persoonia","Proteaceae",NA,NA,NA,NA,86.28,NA,NA
-86468,"Persoonia laurina","Persoonia laurina","Persoonia","Proteaceae",NA,NA,160.779,NA,165.45,NA,NA
 86468,"Persoonia laurina","Persoonia laurina","Persoonia","Proteaceae",NA,NA,160.779,NA,165.45,NA,NA
 29731,"Persoonia levis","Persoonia levis","Persoonia","Proteaceae",1813.15,5.871,207.54,3.456,197.096,NA,NA
 86470,"Persoonia linearis","Persoonia linearis","Persoonia","Proteaceae",72.77,7.792,157.18,2.507,179.32,NA,NA
@@ -33447,7 +33450,7 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 68636,"Phacelia floribunda","Phacelia floribunda","Phacelia","Boraginaceae",NA,NA,NA,NA,0.94,NA,NA
 30038,"Phacelia franklinii","Phacelia franklinii","Phacelia","Boraginaceae",NA,NA,NA,NA,3.8,NA,NA
 30040,"Phacelia fremontii","Phacelia fremontii","Phacelia","Boraginaceae",NA,NA,NA,NA,0.17,NA,NA
-30042,"Phacelia glandulosa",NA,NA,NA,NA,NA,NA,NA,1.74,NA,NA
+30042,"Phacelia glandulosa","Phacelia glandulosa","Phacelia","Boraginaceae",NA,NA,NA,NA,1.74,NA,NA
 30043,"Phacelia grandiflora","Phacelia grandiflora","Phacelia","Boraginaceae",NA,NA,NA,NA,0.133,NA,NA
 30044,"Phacelia grisea","Phacelia grisea","Phacelia","Boraginaceae",NA,NA,NA,NA,0.22,NA,NA
 68637,"Phacelia hastata","Phacelia hastata","Phacelia","Boraginaceae",467.73,NA,NA,0.6,0.889,NA,NA
@@ -33616,7 +33619,7 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 30336,"Phlomis lychnitis","Phlomis lychnitis","Phlomis","Lamiaceae",579,NA,105.82,0.474,7.843,NA,NA
 86724,"Phlomis lycia","Phlomis lycia","Phlomis","Lamiaceae",NA,NA,NA,NA,6,NA,NA
 30339,"Phlomis olivieri","Phlomis olivieri","Phlomis","Lamiaceae",NA,NA,NA,NA,0.04,NA,NA
-86726,"Phlomis platystegia",NA,NA,NA,NA,NA,NA,NA,10.44,NA,NA
+86726,"Phlomis platystegia","Phlomis platystegia","Phlomis","Lamiaceae",NA,NA,NA,NA,10.44,NA,NA
 86727,"Phlomis purpurea","Phlomis purpurea","Phlomis","Lamiaceae",NA,25.5,NA,0.8,4.4,NA,NA
 30343,"Phlomis rigida","Phlomis rigida","Phlomis","Lamiaceae",NA,NA,NA,NA,15,NA,NA
 86728,"Phlomis viscosa","Phlomis viscosa","Phlomis","Lamiaceae",NA,NA,NA,NA,11.47,NA,NA
@@ -33898,7 +33901,7 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 68748,"Physalis heterophylla","Physalis heterophylla","Physalis","Solanaceae",3438.96,NA,38.476,0.632,1.421,0.185,0.17
 30789,"Physalis ixocarpa","Physalis ixocarpa","Physalis","Solanaceae",NA,NA,NA,NA,1.61,NA,NA
 14266,"Physalis minima","Physalis minima","Physalis","Solanaceae",675,NA,NA,1,0.82,NA,NA
-30796,"Physalis nicandroides",NA,NA,NA,NA,NA,NA,NA,2.08,NA,NA
+30796,"Physalis nicandroides","Physalis nicandroides","Physalis","Solanaceae",NA,NA,NA,NA,2.08,NA,NA
 30798,"Physalis patula","Physalis patula","Physalis","Solanaceae",NA,NA,NA,NA,1.63,NA,NA
 30800,"Physalis peruviana","Physalis peruviana","Physalis","Solanaceae",1427.52,NA,NA,1,0.84,NA,NA
 30805,"Physalis philadelphica","Physalis philadelphica","Physalis","Solanaceae",NA,NA,NA,NA,1.52,NA,NA
@@ -34503,7 +34506,7 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 32102,"Plantago amplexicaulis","Plantago amplexicaulis","Plantago","Plantaginaceae",NA,NA,NA,0.05,3.95,NA,NA
 32104,"Plantago arachnoidea","Plantago arachnoidea","Plantago","Plantaginaceae",118,NA,76.22,NA,NA,NA,NA
 32106,"Plantago arborescens","Plantago arborescens","Plantago","Plantaginaceae",NA,NA,NA,0.4,NA,NA,NA
-32108,"Plantago argentea","Plantago argentea","Plantago","Plantaginaceae",NA,NA,NA,0.247,2.25,NA,NA
+32108,"Plantago argentea",NA,NA,NA,NA,NA,NA,0.247,2.25,NA,NA
 68963,"Plantago argyrea","Plantago argyrea","Plantago","Plantaginaceae",130,17.36,80.645,0.08,1.45,0.222,0.24
 32111,"Plantago aristata","Plantago aristata","Plantago","Plantaginaceae",NA,24.49,56.395,NA,1.549,NA,NA
 32112,"Plantago aschersonii",NA,NA,NA,NA,NA,NA,0.05,NA,NA,NA
@@ -34521,7 +34524,6 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 32130,"Plantago crypsoides","Plantago crypsoides","Plantago","Plantaginaceae",NA,NA,NA,NA,0.75,NA,NA
 32131,"Plantago cunninghamii","Plantago cunninghamii","Plantago","Plantaginaceae",480,NA,58.14,0.3,0.671,NA,NA
 32133,"Plantago cylindrica","Plantago cylindrica","Plantago","Plantaginaceae",NA,NA,NA,NA,1.25,NA,NA
-87830,"Plantago debilis","Plantago debilis","Plantago","Plantaginaceae",NA,NA,NA,NA,0.195,NA,NA
 87830,"Plantago debilis","Plantago debilis","Plantago","Plantaginaceae",NA,NA,NA,NA,0.195,NA,NA
 87831,"Plantago depressa","Plantago depressa","Plantago","Plantaginaceae",700,NA,NA,0.071,NA,NA,NA
 32110,"Plantago drummondii","Plantago drummondii","Plantago","Plantaginaceae",480,NA,56.915,0.3,1.815,NA,NA
@@ -34721,7 +34723,7 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 32537,"Pleiotaxis oxylepis","Pleiotaxis oxylepis","Pleiotaxis","Asteraceae",NA,NA,NA,0.8,NA,NA,NA
 88019,"Pleiotaxis pulcherrima","Pleiotaxis pulcherrima","Pleiotaxis","Asteraceae",NA,NA,NA,0.379,NA,NA,NA
 32540,"Pleiotaxis racemosa","Pleiotaxis racemosa","Pleiotaxis","Asteraceae",NA,NA,NA,0.632,NA,NA,NA
-32545,"Pleiotaxis rogersii","Pleiotaxis rogersii","Pleiotaxis","Asteraceae",NA,NA,NA,0.636,NA,NA,NA
+32545,"Pleiotaxis rogersii",NA,NA,NA,NA,NA,NA,0.636,NA,NA,NA
 32559,"Plenckia populnea","Plenckia populnea","Plenckia","Celastraceae",NA,NA,NA,3.784,NA,NA,NA
 69016,"Pleocarphus revolutus","Pleocarphus revolutus","Pleocarphus","Asteraceae",NA,NA,NA,NA,0.67,NA,NA
 88028,"Pleocnemia sp",NA,NA,NA,3019,NA,NA,0.19,NA,NA,NA
@@ -35249,7 +35251,7 @@ NA,"Parapholis incurva","Parapholis incurva","Parapholis","Poaceae",32,NA,NA,0.0
 88581,"Polytaenia texana","Polytaenia texana","Polytaenia","Apiaceae",NA,NA,NA,NA,5.14,NA,NA
 69187,"Polytrias indica","Polytrias indica","Polytrias","Poaceae",NA,10.73,NA,NA,NA,NA,NA
 33495,"Pomaderris adnata","Pomaderris adnata","Pomaderris","Rhamnaceae",NA,NA,NA,NA,0.58,NA,NA
-NA,"Pomaderris amoena",NA,NA,NA,NA,NA,NA,NA,0.88,NA,NA
+NA,"Pomaderris amoena","Pomaderris amoena","Pomaderris","Rhamnaceae",NA,NA,NA,NA,0.88,NA,NA
 88596,"Pomaderris andromedifolia","Pomaderris andromedifolia","Pomaderris","Rhamnaceae",NA,NA,NA,NA,1.73,NA,NA
 33498,"Pomaderris apetala","Pomaderris apetala","Pomaderris","Rhamnaceae",NA,NA,NA,NA,0.69,NA,NA
 33499,"Pomaderris argyrophylla","Pomaderris argyrophylla","Pomaderris","Rhamnaceae",NA,NA,NA,NA,0.839,NA,NA
@@ -35747,7 +35749,7 @@ NA,"Pouteria rodriguesiana","Pouteria rodriguesiana","Pouteria","Sapotaceae",343
 34226,"Premna lucens","Premna lucens","Premna","Lamiaceae",NA,NA,NA,NA,20.08,NA,NA
 34229,"Premna maxima","Premna maxima","Premna","Lamiaceae",NA,NA,NA,NA,NA,0.555,NA
 69293,"Premna mollissima","Premna mollissima","Premna","Lamiaceae",6125,NA,NA,NA,NA,NA,NA
-69294,"Premna oligantha",NA,NA,NA,NA,NA,NA,1,NA,NA,NA
+69294,"Premna oligantha","Premna oligantha","Premna","Lamiaceae",NA,NA,NA,1,NA,NA,NA
 63293,"Premna oligotricha","Premna oligotricha","Premna","Lamiaceae",NA,NA,NA,NA,17.29,NA,NA
 34239,"Premna pyramidata","Premna pyramidata","Premna","Lamiaceae",NA,NA,NA,NA,NA,0.63,NA
 102924,"Premna resinosa","Premna resinosa","Premna","Lamiaceae",NA,NA,NA,NA,22.56,NA,NA
@@ -36355,7 +36357,6 @@ NA,"Prunella vulgaris subsp. asiatica",NA,NA,NA,NA,NA,NA,NA,0.8,NA,NA
 35226,"Psoralea tenuiflora",NA,NA,NA,NA,36.227,117.018,NA,32.125,NA,NA
 60984,"Psorospermum baumii","Psorospermum baumii","Psorospermum","Hypericaceae",NA,NA,NA,2.236,NA,NA,NA
 89654,"Psorospermum febrifugum","Psorospermum febrifugum","Psorospermum","Hypericaceae",NA,NA,NA,1.216,11.94,0.68,NA
-35231,"Psorospermum mechowii","Psorospermum mechowii","Psorospermum","Hypericaceae",NA,NA,NA,0.245,NA,NA,NA
 35231,"Psorospermum mechowii","Psorospermum mechowii","Psorospermum","Hypericaceae",NA,NA,NA,0.245,NA,NA,NA
 35234,"Psorospermum revolutum","Psorospermum revolutum","Psorospermum","Hypericaceae",NA,NA,NA,NA,4.38,NA,NA
 35235,"Psorothamnus arborescens","Psorothamnus arborescens","Psorothamnus","Fabaceae",NA,NA,NA,NA,33.12,NA,NA
@@ -37672,7 +37673,6 @@ NA,"Rhaponticum scariosum","Rhaponticum scariosum","Rhaponticum","Asteraceae",NA
 NA,"Rhaponticum scariosum","Rhaponticum scariosum","Rhaponticum","Asteraceae",NA,NA,NA,NA,47,NA,NA
 91150,"Rhaponticum scariosum subsp. rhaponticum",NA,NA,NA,NA,NA,NA,0.822,NA,NA,NA
 45796,"Rhaponticum uniflorum","Rhaponticum uniflorum","Rhaponticum","Asteraceae",9500,NA,NA,0.158,NA,NA,NA
-45796,"Rhaponticum uniflorum","Rhaponticum uniflorum","Rhaponticum","Asteraceae",9500,NA,NA,0.158,NA,NA,NA
 37704,"Rhazya stricta","Rhazya stricta","Rhazya","Apocynaceae",NA,NA,NA,0.4,4.511,NA,NA
 69836,"Rheedia sp",NA,NA,NA,3019,12.6,NA,22,NA,NA,NA
 44012,"Rhetinantha friedrichsthalii",NA,NA,NA,NA,8.15,NA,NA,NA,NA,NA
@@ -37869,7 +37869,7 @@ NA,"Rhodamnia mulleri","Rhodamnia mulleri","Rhodamnia","Myrtaceae",NA,NA,NA,NA,N
 38015,"Rhododendron macrophyllum","Rhododendron macrophyllum","Rhododendron","Ericaceae",NA,NA,47.909,4.57,0.239,NA,NA
 91420,"Rhododendron maculiferum","Rhododendron maculiferum","Rhododendron","Ericaceae",NA,NA,NA,10,NA,NA,NA
 38025,"Rhododendron maddenii","Rhododendron maddenii","Rhododendron","Ericaceae",NA,NA,NA,7,NA,NA,NA
-39165,"Rhododendron mallotum",NA,NA,NA,NA,NA,NA,5,NA,NA,NA
+39165,"Rhododendron mallotum","Rhododendron mallotum","Rhododendron","Ericaceae",NA,NA,NA,5,NA,NA,NA
 38026,"Rhododendron mariae","Rhododendron mariae","Rhododendron","Ericaceae",3000,12.068,59.662,2,NA,NA,NA
 91437,"Rhododendron mariesii","Rhododendron mariesii","Rhododendron","Ericaceae",700,12.791,51.548,2.449,NA,NA,NA
 38032,"Rhododendron maximum","Rhododendron maximum","Rhododendron","Ericaceae",12000,9.742,165.361,3.715,1.345,0.5,NA
@@ -38838,7 +38838,6 @@ NA,"Rosa sertata","Rosa sertata","Rosa","Rosaceae",NA,NA,NA,2.109,NA,NA,NA
 92259,"Rumex lunaria","Rumex lunaria","Rumex","Polygonaceae",1065.84,21.44,93.458,2,NA,NA,NA
 70137,"Rumex maderensis","Rumex maderensis","Rumex","Polygonaceae",NA,NA,NA,0.8,NA,NA,NA
 70139,"Rumex maricola","Rumex maricola","Rumex","Polygonaceae",NA,NA,NA,NA,2.01,NA,NA
-70139,"Rumex maricola","Rumex maricola","Rumex","Polygonaceae",NA,NA,NA,NA,2.01,NA,NA
 92261,"Rumex maritimus","Rumex maritimus","Rumex","Polygonaceae",2618.9,NA,31.85,0.348,0.318,0.166,0.134
 39773,"Rumex nebroides","Rumex nebroides","Rumex","Polygonaceae",NA,NA,NA,0.463,NA,NA,NA
 39775,"Rumex nepalensis","Rumex nepalensis","Rumex","Polygonaceae",NA,NA,NA,NA,1.65,NA,NA
@@ -39484,7 +39483,7 @@ NA,"Salsola junatovii","Salsola junatovii","Salsola","Amaranthaceae",NA,NA,NA,0.
 70338,"Sandoricum koetjape","Sandoricum koetjape","Sandoricum","Meliaceae",6276.54,NA,NA,16.631,1220,0.468,NA
 70338,"Sandoricum koetjape","Sandoricum koetjape","Sandoricum","Meliaceae",6276.54,NA,NA,16.631,1220,0.468,NA
 41098,"Sandoricum vidalii",NA,NA,NA,NA,NA,NA,NA,NA,0.45,NA
-41102,"Sandwithia guyanensis",NA,NA,NA,4845.01,23.243,62.788,11.189,NA,0.74,NA
+41102,"Sandwithia guyanensis","Sandwithia guyanensis","Sandwithia","Euphorbiaceae",4845.01,23.243,62.788,11.189,NA,0.74,NA
 41106,"Sanguinaria canadensis","Sanguinaria canadensis","Sanguinaria","Papaveraceae",2831.2,26.195,31.153,0.4,11.214,NA,NA
 41105,"Sanguisorba ancistroides","Sanguisorba ancistroides","Sanguisorba","Rosaceae",NA,NA,NA,0.2,NA,NA,NA
 70339,"Sanguisorba canadensis","Sanguisorba canadensis","Sanguisorba","Rosaceae",NA,NA,NA,NA,0.94,NA,NA
@@ -39520,7 +39519,7 @@ NA,"Salsola junatovii","Salsola junatovii","Salsola","Amaranthaceae",NA,NA,NA,0.
 70351,"Santaloides brachyandrum",NA,NA,NA,2752,NA,NA,NA,NA,NA,NA
 70352,"Santalum acuminatum","Santalum acuminatum","Santalum","Santalaceae",485.39,10.061,292.975,4.481,1023.252,0.67,NA
 70352,"Santalum acuminatum","Santalum acuminatum","Santalum","Santalaceae",485.39,10.061,292.975,4.481,1023.252,0.67,NA
-41209,"Santalum album",NA,NA,NA,NA,NA,NA,10,77.203,NA,NA
+41209,"Santalum album","Santalum album","Santalum","Santalaceae",NA,NA,NA,10,77.203,NA,NA
 41215,"Santalum freycinetianum","Santalum freycinetianum","Santalum","Santalaceae",NA,25.6,121.507,NA,NA,0.82,NA
 41218,"Santalum lanceolatum","Santalum lanceolatum","Santalum","Santalaceae",NA,NA,NA,NA,59.752,0.775,NA
 70353,"Santalum macgregorii","Santalum macgregorii","Santalum","Santalaceae",NA,NA,NA,NA,NA,0.68,NA
@@ -41105,7 +41104,6 @@ NA,"Setaria plicata","Setaria plicata","Setaria","Poaceae",675,NA,NA,0.49,NA,NA,
 44383,"Shorea materialis","Shorea materialis","Shorea","Dipterocarpaceae",NA,NA,NA,NA,NA,0.744,NA
 44387,"Shorea maxima","Shorea maxima","Shorea","Dipterocarpaceae",NA,NA,NA,NA,NA,0.55,NA
 94668,"Shorea maxwelliana","Shorea maxwelliana","Shorea","Dipterocarpaceae",NA,NA,NA,NA,NA,0.83,NA
-94668,"Shorea maxwelliana","Shorea maxwelliana","Shorea","Dipterocarpaceae",NA,NA,NA,NA,NA,0.83,NA
 94670,"Shorea meadiana",NA,NA,NA,NA,NA,NA,NA,NA,0.75,NA
 94671,"Shorea mecistopteryx","Shorea mecistopteryx","Shorea","Dipterocarpaceae",NA,NA,286.533,NA,NA,0.422,NA
 94672,"Shorea multiflora","Shorea multiflora","Shorea","Dipterocarpaceae",2535.78,17.803,73.164,40,NA,0.448,NA
@@ -41315,7 +41313,7 @@ NA,"Silene conoidea","Silene conoidea","Silene","Caryophyllaceae",NA,NA,NA,NA,1.
 70813,"Silene fabaria","Silene fabaria","Silene","Caryophyllaceae",NA,NA,NA,NA,0.651,NA,NA
 26575,"Silene firma","Silene firma","Silene","Caryophyllaceae",NA,NA,NA,0.8,NA,NA,NA
 70814,"Silene flos-cuculi","Silene flos-cuculi","Silene","Caryophyllaceae",569.24,15.55,39.958,0.456,0.173,0.241,NA
-60322,"Silene flos-jovis",NA,NA,NA,NA,14,45.005,0.479,0.57,NA,NA
+60322,"Silene flos-jovis","Silene flos-jovis","Silene","Caryophyllaceae",NA,14,45.005,0.479,0.57,NA,NA
 95015,"Silene fruticosa","Silene fruticosa","Silene","Caryophyllaceae",NA,NA,NA,0.2,NA,NA,NA
 70815,"Silene galataea","Silene galataea","Silene","Caryophyllaceae",NA,NA,NA,0.2,NA,NA,NA
 95016,"Silene gallica","Silene gallica","Silene","Caryophyllaceae",449,15.64,39.318,0.267,0.409,0.182,0.165
@@ -43030,7 +43028,6 @@ NA,"Stevia satureifolia","Stevia satureifolia","Stevia","Asteraceae",458.15,NA,7
 48245,"Stylidium soboliferum","Stylidium soboliferum","Stylidium","Stylidiaceae",NA,NA,NA,NA,0.03,NA,NA
 48247,"Stylidium striatum","Stylidium striatum","Stylidium","Stylidiaceae",NA,NA,NA,NA,0.02,NA,NA
 71242,"Stylidium tepperianum","Stylidium tepperianum","Stylidium","Stylidiaceae",NA,NA,NA,NA,0.05,NA,NA
-71242,"Stylidium tepperianum","Stylidium tepperianum","Stylidium","Stylidiaceae",NA,NA,NA,NA,0.05,NA,NA
 65887,"Stylidium thesioides","Stylidium thesioides","Stylidium","Stylidiaceae",NA,NA,NA,NA,0.01,NA,NA
 65889,"Stylidium torticarpum","Stylidium torticarpum","Stylidium","Stylidiaceae",NA,NA,NA,NA,0.05,NA,NA
 65890,"Stylidium turleyae","Stylidium turleyae","Stylidium","Stylidiaceae",NA,NA,NA,NA,0.05,NA,NA
@@ -43315,6 +43312,7 @@ NA,"Swartzia oblata","Swartzia oblata","Swartzia","Fabaceae",NA,NA,NA,NA,NA,0.92
 97076,"Symphyotrichum novae-angliae","Symphyotrichum novae-angliae","Symphyotrichum","Asteraceae",571.38,24.1,42.688,0.885,0.541,0.202,0.203
 48795,"Symphyotrichum novi-belgii","Symphyotrichum novi-belgii","Symphyotrichum","Asteraceae",1266.94,NA,51.815,1.273,0.422,0.202,0.203
 97098,"Symphyotrichum oblongifolium","Symphyotrichum oblongifolium","Symphyotrichum","Asteraceae",NA,24.88,123.2,NA,NA,NA,NA
+48799,"Symphyotrichum oolentangiense","Symphyotrichum oolentangiense","Symphyotrichum","Asteraceae",921.64,15.796,70.923,NA,0.17,NA,NA
 48799,"Symphyotrichum oolentangiense","Symphyotrichum oolentangiense","Symphyotrichum","Asteraceae",921.64,15.796,70.923,NA,0.17,NA,NA
 48800,"Symphyotrichum patens","Symphyotrichum patens","Symphyotrichum","Asteraceae",268.35,NA,79.239,0.538,0.513,NA,NA
 48803,"Symphyotrichum pilosum","Symphyotrichum pilosum","Symphyotrichum","Asteraceae",315.28,23.9,55.197,0.883,0.64,0.207,0.212
@@ -43918,7 +43916,6 @@ NA,"Swartzia oblata","Swartzia oblata","Swartzia","Fabaceae",NA,NA,NA,NA,NA,0.92
 49823,"Taraxacum cucullatum","Taraxacum cucullatum","Taraxacum","Asteraceae",NA,NA,NA,0.182,NA,NA,NA
 71476,"Taraxacum dissectum","Taraxacum dissectum","Taraxacum","Asteraceae",496,NA,60.132,0.058,NA,NA,NA
 71477,"Taraxacum erythrospermum","Taraxacum erythrospermum","Taraxacum","Asteraceae",833.35,NA,31.199,0.124,0.389,0.178,0.158
-71477,"Taraxacum erythrospermum","Taraxacum erythrospermum","Taraxacum","Asteraceae",833.35,NA,31.199,0.124,0.389,0.178,0.158
 49825,"Taraxacum faeroense","Taraxacum faeroense","Taraxacum","Asteraceae",NA,NA,NA,1.5,NA,NA,NA
 71478,"Taraxacum fontanum","Taraxacum fontanum","Taraxacum","Asteraceae",NA,NA,NA,0.144,NA,NA,NA
 97597,"Taraxacum fulvum","Taraxacum fulvum","Taraxacum","Asteraceae",NA,NA,NA,2,NA,NA,NA
@@ -44380,7 +44377,7 @@ NA,"Swartzia oblata","Swartzia oblata","Swartzia","Fabaceae",NA,NA,NA,NA,NA,0.92
 50678,"Tetrasynandra longipes",NA,NA,NA,NA,NA,NA,NA,224,NA,NA
 71578,"Tetratheca ericifolia","Tetratheca ericifolia","Tetratheca","Elaeocarpaceae",2.79,NA,243.902,0.15,2.048,NA,NA
 50691,"Tetratheca hirsuta","Tetratheca hirsuta","Tetratheca","Elaeocarpaceae",NA,NA,NA,NA,6.85,NA,NA
-50779,"Tetratheca shiressii","Tetratheca shiressii","Tetratheca","Elaeocarpaceae",NA,NA,NA,NA,6.18,NA,NA
+50779,"Tetratheca shiressii",NA,NA,NA,NA,NA,NA,NA,6.18,NA,NA
 50700,"Tetrathylacium johansenii","Tetrathylacium johansenii","Tetrathylacium","Salicaceae",5376.47,21.76,62.088,26.084,1,0.59,NA
 50706,"Tetrathylacium macrophyllum","Tetrathylacium macrophyllum","Tetrathylacium","Salicaceae",27158.27,25.498,48.115,17,NA,0.62,NA
 50707,"Tetrazygia bicolor",NA,NA,NA,NA,NA,NA,9.144,NA,NA,NA
@@ -45011,7 +45008,7 @@ NA,"Tragia angolensis","Tragia angolensis","Tragia","Euphorbiaceae",NA,NA,NA,0.5
 35455,"Tragopogon porrifolius subsp. longirostris",NA,NA,NA,NA,NA,NA,NA,11.895,NA,NA
 52062,"Tragopogon pratensis","Tragopogon pratensis","Tragopogon","Asteraceae",681.68,21.9,42.594,0.47,7.063,0.161,NA
 52065,"Tragus australianus","Tragus australianus","Tragus","Poaceae",NA,NA,NA,0.4,0.438,NA,NA
-52066,"Tragus berteronianus",NA,NA,NA,NA,17.005,NA,0.45,0.257,NA,NA
+52066,"Tragus berteronianus","Tragus berteronianus","Tragus","Poaceae",NA,17.005,NA,0.45,0.257,NA,NA
 52067,"Tragus koelerioides","Tragus koelerioides","Tragus","Poaceae",NA,NA,NA,0.5,NA,NA,NA
 52071,"Tragus mongolorum","Tragus mongolorum","Tragus","Poaceae",NA,NA,NA,NA,0.76,NA,NA
 71777,"Tragus pedunculatus",NA,NA,NA,NA,NA,NA,0.2,NA,NA,NA
@@ -46409,7 +46406,7 @@ NA,"Tragia angolensis","Tragia angolensis","Tragia","Euphorbiaceae",NA,NA,NA,0.5
 55167,"Veronica formosa","Veronica formosa","Veronica","Plantaginaceae",NA,NA,NA,NA,1.31,NA,NA
 55169,"Veronica fruticans","Veronica fruticans","Veronica","Plantaginaceae",17.46,NA,58.411,0.086,0.132,0.222,0.24
 55172,"Veronica fruticulosa","Veronica fruticulosa","Veronica","Plantaginaceae",NA,NA,NA,0.172,0.24,NA,NA
-55173,"Veronica gentianoides",NA,NA,NA,69.33,27.484,77.399,0.148,0.224,0.19,0.18
+55173,"Veronica gentianoides","Veronica gentianoides","Veronica","Plantaginaceae",69.33,27.484,77.399,0.148,0.224,0.19,0.18
 55176,"Veronica glandifera",NA,NA,NA,NA,NA,NA,0.1,0.05,NA,NA
 55187,"Veronica hederifolia","Veronica hederifolia","Veronica","Plantaginaceae",260.68,14.168,36.641,0.161,3.742,0.139,0.083
 NA,"Veronica hillebrandii","Veronica hillebrandii","Veronica","Plantaginaceae",NA,NA,NA,NA,0.28,NA,NA

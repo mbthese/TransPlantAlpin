@@ -1,0 +1,245 @@
+---
+title: "Marion's script"
+output: html_document
+date: "2026-02-03"
+---
+
+# 1_clean_taxonomy_TNRS
+
+# ================================
+# 1. LOAD PACKAGES AND DATA
+# ================================
+
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(TNRS)
+
+# Load original dataset containing species names
+load("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/Transplantation Alpine/Script_R_Marcet/Données initiales/TransPlantNetwork.RData")
+
+# ============================================
+# 2. EXTRACT AND PREPARE SPECIES NAME LIST
+# ============================================
+
+# Extract unique species codes from dataset
+species_codes_raw <- unique(dat$SpeciesName)
+species_codes_df <- data.frame(code = species_codes_raw)
+
+# Join with taxa table to match species codes with their names
+species_codes_df <- species_codes_df %>%
+  left_join(spcodes %>% select(code, taxa), by = "code") %>%
+  distinct()
+
+# Replace missing taxa values by using the original code as fallback
+species_codes_clean <- species_codes_df %>%
+  mutate(taxa = ifelse(is.na(taxa), code, taxa))
+
+# Create TNRS input dataframe with unique row numbers
+tnrs_input <- data.frame(Row_Number = 1:nrow(species_codes_clean),
+                         SpeciesName = species_codes_clean$taxa)
+
+# ========================================
+# 3. TNRS CORRESPONDENCE
+# ========================================
+
+tnrs_results <- TNRS(tnrs_input)
+
+# ========================================
+# 4. CLEANING TNRS RESULTS AND FIXING ERRORS
+# ========================================
+# Get the best resolved name: species or fallback to accepted name
+tnrs_results <- tnrs_results %>%
+  mutate(sp_final = ifelse(Accepted_species == "", 
+                           ifelse(Accepted_name == "", NA, Accepted_name), #If Accepted_species is empty, use Accepted_name instead. if both empty, then NA
+                           Accepted_species))
+
+# Manual corrections for problematic species
+problem_ids <- c(129, 168, 275, 441, 442, 
+                 446, 447, 448, 551, 556, 
+                 579, 584, 589, 591, 622, 
+                 625, 636, 637, 652, 735, 
+                 776, 803, 864, 875, 876, 
+                 877, 878, 879, 1092, 1123, 
+                 1136, 1138, 1305, 1306, 1325) #marion adding more
+
+
+## TNRS Marion checked - 35 totals
+# tnrs_marion <- tnrs_results %>% select(ID, Name_submitted, Overall_score, Accepted_name, Accepted_species)
+# View(tnrs_marion)
+# tnrs_marion <- tnrs_marion %>%filter(Overall_score < 1)
+# write.csv(tnrs_marion, "tnrs_marion_below_tnrs_score_1.csv", row.names = F)
+
+#ID129 = cannot be Daniella : Dianthus meducensis ?
+#ID168 = Dianthus lanceolatus
+#ID275 = Arctous alpina
+#ID441 = Ranunculus acris ###already flagged
+#ID442; 447 = Leontodon hispidus
+#ID446; 448 = Anthyllis vulneraria
+#ID551 = Poaceae ###already flagged
+#ID556 = Gentiana alpina
+#ID579 = Silene nutans
+#ID584 = Carlina
+#ID589 = Phyteuma scaposum 
+#ID591 = Polygala
+#ID622 = Sinapis alba ###already flagged
+#ID625 = Poaceae ###already flagged
+#ID636 = NA
+#ID637 = Poaceae ###already flagged
+#ID652 = Brassicaceae
+#ID735 = Hieracium froelichianum
+#ID776 = Noccaea montana
+#ID803 = Androsace septentrionalis
+#ID864 = NA ###already flagged
+#ID875; 846; 877; 878; 879 = NA
+#ID1092 = Cerastium fontanum
+#ID1123 = Apicaceae
+#ID1136 = NA
+#ID1138 = NA
+#ID1305 = Poa alpigena
+#ID1306 = Poa alpigena
+#ID1325 = Selaginella selaginoides
+
+
+# Save old values before manual correction
+manual_fixes <- tnrs_results %>%
+  filter(ID %in% problem_ids) %>%
+  select(ID, Name_submitted, sp_final, Accepted_family) %>%
+  rename(sp_final_old = sp_final,
+         Accepted_family_old = Accepted_family)
+
+# Apply manual corrections
+tnrs_results$sp_final[tnrs_results$ID %in% c(551, 625, 637, 622, 864)] <- NA
+tnrs_results$Accepted_family[tnrs_results$ID %in% c(551, 625, 637, 622, 864)] <- NA
+
+tnrs_results$sp_final[tnrs_results$ID == 441] <- "Ranunculus acris"
+tnrs_results$Accepted_family[tnrs_results$ID == 441] <- "Ranunculaceae"
+
+#Marion additional manual corrections
+tnrs_results$sp_final[tnrs_results$ID %in% c(636, 875, 876, 877, 878, 879, 1136, 1138)] <- NA
+tnrs_results$Accepted_family[tnrs_results$ID %in% c(636, 875, 876, 877, 878, 879, 1136, 1138)] <- NA
+
+tnrs_results$sp_final[tnrs_results$ID == 129] <- "Dianthus meducensis"
+tnrs_results$Accepted_family[tnrs_results$ID == 129] <- "Caryophyllaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 168] <- "Dianthus lanceolatus"
+tnrs_results$Accepted_family[tnrs_results$ID == 168] <- "Caryophyllaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 275] <- "Arctous alpina"
+tnrs_results$Accepted_family[tnrs_results$ID == 275] <- "Ericaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 442] <- "Leontodon hispidus"
+tnrs_results$Accepted_family[tnrs_results$ID == 442] <- "Asteraceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 447] <- "Leontodon hispidus"
+tnrs_results$Accepted_family[tnrs_results$ID == 447] <- "Asteraceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 446] <- "Anthyllis vulneraria"
+tnrs_results$Accepted_family[tnrs_results$ID == 446] <- "Fabaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 448] <- "Anthyllis vulneraria"
+tnrs_results$Accepted_family[tnrs_results$ID == 448] <- "Fabaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 551] <- "Poaceae"
+tnrs_results$Accepted_family[tnrs_results$ID == 551] <- "Poaceae" #already flagged but not replaced
+
+tnrs_results$sp_final[tnrs_results$ID == 556] <- "Gentiana alpina"
+tnrs_results$Accepted_family[tnrs_results$ID == 556] <- "Gentianaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 579] <- "Silene nutans"
+tnrs_results$Accepted_family[tnrs_results$ID == 579] <- "Caryophyllaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 584] <- "Carlina"
+tnrs_results$Accepted_family[tnrs_results$ID == 584] <- "Asteraceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 589] <- "Phyteuma scaposum"
+tnrs_results$Accepted_family[tnrs_results$ID == 589] <- "Campanulaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 591] <- "Polygala"
+tnrs_results$Accepted_family[tnrs_results$ID == 591] <- "Polygalaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 622] <- "Sinapis alba"
+tnrs_results$Accepted_family[tnrs_results$ID == 622] <- "Brassicaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 625] <- "Poaceae"
+tnrs_results$Accepted_family[tnrs_results$ID == 625] <- "Poaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 637] <- "Poaceae"
+tnrs_results$Accepted_family[tnrs_results$ID == 637] <- "Poaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 652] <- "Brassicaceae"
+tnrs_results$Accepted_family[tnrs_results$ID == 652] <- "Brassicaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 735] <- "Hieracium froelichianum"
+tnrs_results$Accepted_family[tnrs_results$ID == 735] <- "Asteraceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 776] <- "Noccaea montana"
+tnrs_results$Accepted_family[tnrs_results$ID == 776] <- "Brassicaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 803] <- "Androsace septentrionalis"
+tnrs_results$Accepted_family[tnrs_results$ID == 803] <- "Primulaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 1092] <- "Cerastium fontanum"
+tnrs_results$Accepted_family[tnrs_results$ID == 1092] <- "Caryophyllaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 1123] <- "Apicaceae"
+tnrs_results$Accepted_family[tnrs_results$ID == 1123] <- "Apicaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 1305] <- "Poa alpigena"
+tnrs_results$Accepted_family[tnrs_results$ID == 1305] <- "Poaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 1306] <- "Poa alpigena"
+tnrs_results$Accepted_family[tnrs_results$ID == 1306] <- "Poaceae"
+
+tnrs_results$sp_final[tnrs_results$ID == 1325] <- "Selaginella selaginoides"
+tnrs_results$Accepted_family[tnrs_results$ID == 1325] <- "Selaginellaceae"
+
+# Save corrected values into manual fix table
+manual_fixes$sp_final_new <- tnrs_results$sp_final[match(manual_fixes$ID, tnrs_results$ID)]
+manual_fixes$Accepted_family_new <- tnrs_results$Accepted_family[match(manual_fixes$ID, tnrs_results$ID)]
+
+# ==============================================
+# 5. FORMAT CLEANED RESULTS INTO FINAL TABLE
+# ==============================================
+
+tnrs_summary <- tnrs_results %>%
+  select(Name_submitted, sp_final, Accepted_family) %>%
+  rename(Species = sp_final,
+         Family = Accepted_family) %>%
+  mutate(
+    Family = ifelse(is.na(Family) | Family == "", Species, Family),
+    Species = ifelse(Family == Species, NA, Species), #remove species' names that are actually family name / if family equal to species then species is NA
+    Genus = ifelse(is.na(Species), NA, word(Species, 1)), #if species is na then genus is na / or extract first word
+    Species = ifelse(str_count(Species, "\\S+") == 1, NA, Species), #remove if in species there is a single word
+    name_species = case_when( #new column that is either filled with family/genus/species name to ensure a taxo name
+      !is.na(Species) ~ Species,
+      !is.na(Genus) ~ Genus,
+      TRUE ~ Family
+    )
+  ) %>%
+  select(Name_submitted, name_species, Species, Genus, Family)
+
+# Export final TNRS correspondence table
+write.csv(tnrs_summary, "TNRS_Correspondance_marion.csv", row.names = FALSE)
+
+# ==========================================
+# 6. PLOT QUALITY OF TAXONOMIC IDENTIFICATION
+# ==========================================
+
+tnrs_quality <- tnrs_summary %>%
+  mutate(niveau_id = case_when(
+    !is.na(Species) ~ "Species",
+    !is.na(Genus) ~ "Genus",
+    !is.na(Family) ~ "Family",
+    TRUE ~ "Unidentified"
+  ))
+
+identification_summary <- tnrs_quality %>%
+  count(niveau_id)
+
+ggplot(identification_summary, aes(x = "", y = n, fill = niveau_id)) +
+  geom_col(width = 1) +
+  coord_polar(theta = "y") +
+  labs(title = "Identification Level of Submitted Names",
+       fill = "Taxonomic Level") +
+  theme_void()
