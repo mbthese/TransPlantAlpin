@@ -1,0 +1,3034 @@
+---
+title: "Region"
+output: html_document
+date: "2026-03-13"
+editor_options: 
+  chunk_output_type: console
+---
+#library
+```{r}
+library(readr)
+library(here)
+library(tidyverse)   
+library(readxl)
+library(ggpubr)
+library(funrar)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(TNRS) #c'est une application, pas une base de données
+library(emmeans)
+library(lme4)
+library(stargazer)
+library(ggeffects)
+```
+
+
+#Chisholm analysis 
+
+
+#Par region
+##data
+```{r}
+
+warm_data <-read_csv(here("intermediate data", "site_species_warm_end_clean_abs_abund_cover_initial_final.csv")) %>%
+  mutate(delta2_Abs_Cover = (Abs_Cover_final - Abs_Cover_initial)^2,
+          delta_years = Year_final -Year_initial) %>%
+  relocate(delta_years, .after= Year_final)  %>%
+  mutate(logN = log10(Abs_Cover_initial),
+         logDelta2 = log10(delta2_Abs_Cover),
+         Treatment = "warm")
+
+control_origin_data <- read.csv(here("intermediate data", "site_species_CO_end_clean_abs_abund_cover_initial_final.csv"))  %>%
+  mutate(delta2_Abs_Cover = (Abs_Cover_final - Abs_Cover_initial)^2,
+          delta_years = Year_final -Year_initial) %>%
+  relocate(delta_years, .after= Year_final)  %>%
+  mutate(logN = log10(Abs_Cover_initial),
+         logDelta2 = log10(delta2_Abs_Cover),
+         Treatment = "Control_origin")
+
+
+control_dest_data <- read.csv(here("intermediate data", "site_species_CD_end_clean_abs_abund_cover_initial_final.csv"))  %>%
+  mutate(delta2_Abs_Cover = (Abs_Cover_final - Abs_Cover_initial)^2,
+          delta_years = Year_final -Year_initial) %>%
+  relocate(delta_years, .after= Year_final)  %>%
+  mutate(logN = log10(Abs_Cover_initial),
+         logDelta2 = log10(delta2_Abs_Cover),
+         Treatment = "Control_dest")
+
+data <- rbind(warm_data, control_dest_data, control_origin_data)
+
+# add variable elevation and plotSize
+
+metadata <- read.csv(here("intermediate data","metadata.csv"))
+
+data <-data %>% left_join(metadata %>% select(Region, destSiteID, Elevation, PlotSize)) %>%
+  relocate(PlotSize, .after= destPlotID)
+
+data <-data %>% relocate(Elevation, .after= destPlotID)
+names(data)
+
+unique(data$Region)
+
+```
+
+##add temperature
+```{r}
+
+# Load original dataset 
+load("./raw data/TransPlantNetwork.RData")
+
+climdata <- climdata %>% filter(month %in% c("6","7","8")) #average of hottest months 
+
+temperature <- climdata %>%
+  filter(year %in% sample(2007:2022)) %>%
+  group_by(gradient, elevation, year) %>%
+  filter(var == "temperature")%>%
+   mutate(elevation = ifelse(gradient == "CH_Calanda" & elevation == 2800, 2600, elevation))%>% # Correction to Calanda experiment
+  rename(Region = gradient) 
+
+CH_Calanda_temp <- temperature%>%
+  filter(Region == "CH_Calanda")%>%
+  group_by(Region, elevation, year)%>%
+  filter(year %in% sample(YearMin:YearMax))%>%
+  summarise(mean_temperature = mean(value), .groups = "drop")%>%
+  pivot_wider(names_from = year , values_from = mean_temperature)%>%
+  mutate(row_mean = rowMeans(select(., -c(1:2)), na.rm = TRUE))
+
+
+survey_years <- data %>%
+  group_by(Region) %>%
+  summarise(year_min = min(Year_initial, na.rm = TRUE),
+            year_max = max(Year_final, na.rm = TRUE),
+            .groups = "drop")
+
+region <- unique(temperature$Region) 
+region <- region[region!="IN_Kashmir"]
+region <- region[region!="US_Arizona"]
+region <- region[region!="US_Colorado"]
+
+temp_data <- data.frame()
+
+for (i in region) {
+  
+  # get the survey year range for this region
+  yr_min <- survey_years %>% filter(Region == i) %>% pull(year_min)
+  yr_max <- survey_years %>% filter(Region == i) %>% pull(year_max)
+  
+  results <- temperature%>%
+    filter(Region == i)%>%
+    filter(year >= yr_min & year <= yr_max) %>%
+    group_by(Region,elevation, year)%>%
+    summarise(mean_temperature = mean(value),.groups = "drop")%>%
+    pivot_wider(names_from = year , values_from = mean_temperature)%>%
+    mutate(temp_mean = rowMeans(select(., -c(1:2)), na.rm = TRUE))%>%
+    rename(Elevation = elevation)%>%
+    select(Region, Elevation, temp_mean) 
+  
+  temp_data<- rbind(temp_data, results)
+  
+}
+
+
+site_elevation <- data %>%
+  distinct(Region, destSiteID, Elevation) %>%
+  left_join(temp_data)%>%
+  rename(SiteID = destSiteID)
+
+data<- data%>%
+  # join origin temp
+  left_join(site_elevation %>% select(Region, SiteID, temp_mean),
+            by = c("Region", "originSiteID" = "SiteID")) %>%
+  rename(temp_origin = temp_mean) %>%
+  # join dest temp
+  left_join(site_elevation %>% select(Region, SiteID, temp_mean),
+            by = c("Region", "destSiteID" = "SiteID")) %>%
+  rename(temp_dest = temp_mean) %>%
+  mutate(delta_temp = temp_dest - temp_origin)
+
+```
+
+##*CH_Calanda*
+
+###control_origin
+```{r}
+data_CH_Calanda <-data %>% filter(Region == "CH_Calanda")
+
+dim(data_CH_Calanda) #1334 16
+
+names(data_CH_Calanda)
+unique(data_CH_Calanda$destPlotID)
+
+data_CH_Calanda_CO <- data_CH_Calanda %>% filter(Treatment =="Control_origin")
+
+length(unique(data_CH_Calanda_CO)) #16
+data_CH_Calanda_CO$delta_years #5 from 2013 to 2018 measured each year (checked out in site_species_CO data csv)
+
+dim(data_CH_Calanda_CO) #490  16
+length(unique(data_CH_Calanda_CO$Species)) #75
+# et combien de plots control origin?
+length(unique(data_CH_Calanda_CO$destPlotID)) #20
+length(unique(data_CH_Calanda_CO$destSiteID)) #2
+length(unique(data_CH_Calanda_CO$Elevation)) #2
+
+A<-data_CH_Calanda_CO %>% filter(destSiteID == "Pea")
+unique(A$destPlotID)
+ # [1] "Pea01.01" "Pea02.01" "Pea03.01" "Pea04.01" "Pea05.01" "Pea06.01"
+ # [7] "Pea07.01" "Pea08.01" "Pea09.01" "Pea10.01"
+
+#en gros si j'ai bien compris, il y a dans cette region, 2 sites de "control_origin" à deux altitudes différentes, pour lesquels on a des répétition : 10 desstPLot pour chque destSite.
+
+#comme dans chisholm on ne prend pas en compte l'immigration, si une espèce est absente au temps iniital alors log(0-Nt+1) = c'est pas grave c'est log(Nt+1) non? on a pas de -inf
+
+data_CH_Calanda_CO %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+# 
+#  A tibble: 1 × 4
+#   n_inf_logN n_inf_logDelta2 n_zero_initial n_zero_delta2
+#        <int>           <int>          <int>         <int>
+# 1          0              98              0            98
+
+data_CH_Calanda_CO_clean <- data_CH_Calanda_CO %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CH_Calanda_CO_clean)#[1] 392  16
+
+# régression
+lm_CO <- lm(logDelta2 ~ logN, data = data_CH_Calanda_CO_clean)
+summary(lm_CO)
+
+#mais il y a deux elevations! on sépare
+data_CH_Calanda_CO_clean %>% #ca sert a quoi de savoir ca?
+  group_by(destSiteID) %>%
+  summarise(
+    n = n(),
+    mean_logN = mean(logN),
+    mean_logDelta2 = mean(logDelta2)
+  )
+
+# et régression séparée par site
+lm_CO_Pea <- lm(logDelta2 ~ logN, 
+                data = data_CH_Calanda_CO_clean %>% 
+                filter(destSiteID == "Pea"))
+
+lm_CO_Cal <- lm(logDelta2 ~ logN, 
+                  data = data_CH_Calanda_CO_clean %>% 
+                  filter(destSiteID == "Cal"))
+
+summary(lm_CO_Pea) #elevation 2600
+summary(lm_CO_Cal) #elevation 2000
+
+#quatifier les colonizers
+data_CH_Calanda_CO_status <- data_CH_Calanda_CO %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CH_Calanda_CO_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+# 
+# A tibble: 2 × 3
+#   status          n   pct
+#   <chr>       <int> <dbl>
+# 1 disappeared    93  19.0
+# 2 persistent    397  81.0 #therefore no colonizers!
+
+data_CH_Calanda_CO_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_CO_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CH_Calanda_CO_corrected <- data_CH_Calanda_CO_status %>%
+  mutate(
+    logN = log10(Abs_Cover_initial),
+    delta2_corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_corrected = log10(delta2_corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CH_Calanda_CO_corrected$logDelta2_corrected))
+
+lm_CO_corrected <- lm(logDelta2_corrected ~ logN, 
+                       data = data_CH_Calanda_CO_corrected)
+
+summary(lm_CO_corrected)
+
+# et régression séparée par site
+lm_CO_Pea <- lm(logDelta2_corrected ~ logN, 
+                data = data_CH_Calanda_CO_corrected %>% 
+                filter(destSiteID == "Pea"))
+
+lm_CO_Cal <- lm(logDelta2_corrected ~ logN, 
+                  data = data_CH_Calanda_CO_corrected %>%
+                  filter(destSiteID == "Cal"))
+
+summary(lm_CO_Pea)
+summary(lm_CO_Cal)
+
+#plot
+data_CH_Calanda_CO_corrected <- data_CH_Calanda_CO_corrected %>%
+  mutate(destSiteID =recode(destSiteID, "Cal" = "Cal-2000m", "Pea" = "Pea-2600m"))
+
+(CH_Calanda_control_O <- data_CH_Calanda_CO_corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CH_Calanda — Control Origin",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+
+
+
+
+###let's keep the intercept
+
+summary(lm_CO_Pea) 
+(intercept_control_origin_Pea <- coef(lm_CO_Pea)["(Intercept)"])
+  
+summary(lm_CO_Cal)
+(intercept_control_origin_Cal <- coef(lm_CO_Cal)["(Intercept)"])
+
+```
+
+###control_dest
+```{r}
+data_CH_Calanda_CD <- data_CH_Calanda %>% filter(Treatment =="Control_dest")
+
+length(unique(data_CH_Calanda_CD)) #16
+data_CH_Calanda_CD$delta_years #5 from 2013 to 2018 measured each year (checked out in site_species_CD data csv)
+
+dim(data_CH_Calanda_CD) #318  16
+length(unique(data_CH_Calanda_CD$Species)) #64
+# et combien de plots control origin?
+length(unique(data_CH_Calanda_CD$destPlotID)) #10
+length(unique(data_CH_Calanda_CD$destSiteID)) #1 site at 1400 m
+length(unique(data_CH_Calanda_CD$Elevation)) #1
+
+data_CH_Calanda_CD %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+# # A tibble: 1 × 4
+#   n_inf_logN n_inf_logDelta2 n_zero_initial n_zero_delta2
+#        <int>           <int>          <int>         <int>
+# 1          0              52              0            52
+
+data_CH_Calanda_CD_clean <- data_CH_Calanda_CD %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CH_Calanda_CD_clean)#266  16
+
+# régression
+lm_CD <- lm(logDelta2 ~ logN, data = data_CH_Calanda_CD_clean)
+summary(lm_CD)
+
+#quatifier les colonizers
+data_CH_Calanda_CD_status <- data_CH_Calanda_CD %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CH_Calanda_CD_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+# 
+# A tibble: 2 × 3
+#   status          n   pct
+#   <chr>       <int> <dbl>
+# 1 disappeared    96  30.2
+# 2 persistent    222  69.8 again no colonizers
+
+data_CH_Calanda_CD_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_Cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_CD_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CH_Calanda_CD_Corrected <- data_CH_Calanda_CD_status %>%
+  mutate(
+    delta2_Corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_Corrected = log10(delta2_Corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CH_Calanda_CD_Corrected$logDelta2_Corrected))
+
+lm_CD_Corrected <- lm(logDelta2_Corrected ~ logN, 
+                       data = data_CH_Calanda_CD_Corrected)
+
+summary(lm_CD_Corrected)
+
+coef(lm_CO_corrected)["(Intercept)"]
+#plot
+data_CH_Calanda_CD_Corrected <- data_CH_Calanda_CD_Corrected %>%
+  mutate(destSiteID =recode(destSiteID, "Nes" = "Nes-1400m"))
+
+(CH_Calanda_Control_O <- data_CH_Calanda_CD_Corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_Corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CD_Corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CD_Corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CH_Calanda — Control Destination",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+```
+
+###warm
+```{r}
+data_CH_Calanda_warm <- data_CH_Calanda %>% filter(Treatment =="warm")
+
+length(unique(data_CH_Calanda_warm)) #16
+data_CH_Calanda_warm$delta_years #5 from 2013 to 2018 measured each year (checked out in site_species_CO data csv)
+
+dim(data_CH_Calanda_warm) # 526  16
+length(unique(data_CH_Calanda_warm$Species)) #80
+# et combien de plots control origin?
+length(unique(data_CH_Calanda_warm$destPlotID)) #20
+length(unique(data_CH_Calanda_warm$destSiteID)) #2
+length(unique(data_CH_Calanda_warm$Elevation)) #2
+
+A<-data_CH_Calanda_warm %>% filter(destSiteID == "Nes")
+unique(A$destPlotID)
+
+#en gros si j'ai bien compris, on a transplanté de haut vers le bas sur 2 sites bas différernts venant de deux sites hauts différernts
+
+data_CH_Calanda_warm %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+# 
+# A tibble: 1 × 4
+#   n_inf_logN n_inf_logDelta2 n_zero_initial n_zero_delta2
+#        <int>           <int>          <int>         <int>
+# 1          0              56              0            56
+
+data_CH_Calanda_warm_clean <- data_CH_Calanda_warm %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CH_Calanda_warm_clean)#[1] 470  16
+
+# régression
+lm_warm <- lm(logDelta2 ~ logN, data = data_CH_Calanda_warm_clean)
+summary(lm_warm)
+
+#mais il y a deux elevations! on sépare
+data_CH_Calanda_warm_clean %>% #ca sert a quoi de savoir ca?
+  group_by(destSiteID) %>%
+  summarise(
+    n = n(),
+    mean_logN = mean(logN),
+    mean_logDelta2 = mean(logDelta2)
+  )
+
+# et régression séparée par site
+lm_warm_Nes <- lm(logDelta2 ~ logN, 
+                data = data_CH_Calanda_warm_clean %>% 
+                filter(destSiteID == "Nes"))
+
+lm_warm_Cal <- lm(logDelta2 ~ logN, 
+                  data = data_CH_Calanda_warm_clean %>% 
+                  filter(destSiteID == "Cal"))
+
+summary(lm_warm_Nes) #elevation 1400
+summary(lm_warm_Cal) #elevation 2000
+
+#quatifier les colonizers
+data_CH_Calanda_warm_status <- data_CH_Calanda_warm %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CH_Calanda_warm_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+# 
+# A tibble: 2 × 3
+#   status          n   pct
+#   <chr>       <int> <dbl>
+# 1 disappeared   254  48.3
+# 2 persistent    272  51.7
+
+data_CH_Calanda_warm_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_warm_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CH_Calanda_warm_corrected <- data_CH_Calanda_warm_status %>%
+  mutate(
+    delta2_corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_corrected = log10(delta2_corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CH_Calanda_warm_corrected$logDelta2_corrected))
+
+lm_warm_corrected <- lm(logDelta2_corrected ~ logN, 
+                       data = data_CH_Calanda_warm_corrected %>%
+                       filter(is.finite(logN)))
+
+summary(lm_warm_corrected)
+
+# et régression séparée par site
+lm_warm_Nes <- lm(logDelta2_corrected ~ logN, 
+                data = data_CH_Calanda_warm_corrected %>%
+                       filter(is.finite(logN)) %>% 
+                filter(destSiteID == "Nes"))
+
+lm_warm_Cal <- lm(logDelta2_corrected ~ logN, 
+                  data = data_CH_Calanda_warm_corrected %>%
+                       filter(is.finite(logN)) %>% 
+                  filter(destSiteID == "Cal"))
+
+summary(lm_warm_Nes)
+summary(lm_warm_Cal)
+
+
+coef(lm_warm_Nes)["(Intercept)"]
+coef(lm_warm_Cal)["(Intercept)"]
+
+
+warm_cal_res <- as.data.frame(resid(lm_warm_Cal)) #regarder si les espèces sortent de cette relation fortement 
+warm_cal_res <-cbind(warm_cal_res, data_CH_Calanda_warm_corrected %>%
+                       filter(is.finite(logN)) %>% 
+                  filter(destSiteID == "Cal") %>% select(Species))
+
+warm_cal_res %>%
+ filter(`resid(lm_warm_Cal)` >= -3.45 & `resid(lm_warm_Cal)` <= -2.4) %>%
+ ggplot() +
+  aes(x = `resid(lm_warm_Cal)`, fill = Species) +
+  geom_histogram(bins = 30L) +
+  scale_fill_hue(direction = 1) +
+  theme_minimal()
+
+warm_cal_res %>%
+ filter(`resid(lm_warm_Cal)` >= 1.05 & `resid(lm_warm_Cal)` <= 2.7) %>%
+ ggplot() +
+  aes(x = `resid(lm_warm_Cal)`, fill = Species) +
+  geom_histogram(bins = 30L) +
+  scale_fill_hue(direction = 1) +
+  theme_minimal()
+
+
+#plot
+data_CH_Calanda_warm_corrected <- data_CH_Calanda_warm_corrected %>%
+  mutate(destSiteID =recode(destSiteID, "Cal" = "Cal-2000m", "Nes" = "Nes-1400m"))
+
+(CH_Calanda_warm <- data_CH_Calanda_warm_corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CH_Calanda — Warm",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+
+```
+
+
+##*CH_Calanda_2*
+
+###control_origin
+```{r}
+data_CH_Calanda_2 <-data %>% filter(Region == "CH_Calanda2")
+
+dim(data_CH_Calanda_2) #912 16
+
+data_CH_Calanda_2_CO <- data_CH_Calanda_2 %>% filter(Treatment =="Control_origin")
+
+length(unique(data_CH_Calanda_2_CO)) #16
+data_CH_Calanda_2_CO$delta_years #2
+
+dim(data_CH_Calanda_2_CO) #300 16
+length(unique(data_CH_Calanda_2_CO$Species)) #49
+# et combien de plots control origin?
+length(unique(data_CH_Calanda_2_CO$destPlotID)) #10
+length(unique(data_CH_Calanda_2_CO$destSiteID)) #2
+length(unique(data_CH_Calanda_2_CO$Elevation)) #2
+
+data_CH_Calanda_2_CO %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_2_CO_clean <- data_CH_Calanda_2_CO %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CH_Calanda_2_CO_clean)#[1] 291  16
+
+# régression
+lm_CO <- lm(logDelta2 ~ logN, data = data_CH_Calanda_2_CO_clean)
+summary(lm_CO)
+
+
+#quatifier les colonizers
+data_CH_Calanda_2_CO_status <- data_CH_Calanda_2_CO %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CH_Calanda_2_CO_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+
+data_CH_Calanda_2_CO_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_2_CO_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CH_Calanda_2_CO_corrected <- data_CH_Calanda_2_CO_status %>%
+  mutate(
+    logN = log10(Abs_Cover_initial),
+    delta2_corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_corrected = log10(delta2_corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CH_Calanda_2_CO_corrected$logDelta2_corrected))
+
+lm_CO_corrected <- lm(logDelta2_corrected ~ logN, 
+                       data = data_CH_Calanda_2_CO_corrected)
+
+summary(lm_CO_corrected)
+
+#plot
+data_CH_Calanda_2_CO_corrected <- data_CH_Calanda_2_CO_corrected %>%
+  mutate(destSiteID =recode(destSiteID, "Cal" = "Cal-2000m", "Nes" = "Pea-1400m"))
+
+(CH_Calanda_2_control_O <- data_CH_Calanda_2_CO_corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CH_Calanda_2 — Control Origin",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+```
+
+###control_dest
+```{r}
+data_CH_Calanda_2_CD <- data_CH_Calanda_2 %>% filter(Treatment =="Control_dest")
+
+dim(data_CH_Calanda_2_CD) #318  16
+length(unique(data_CH_Calanda_2_CD$Species)) #64
+# et combien de plots control origin?
+length(unique(data_CH_Calanda_2_CD$destPlotID)) #10
+length(unique(data_CH_Calanda_2_CD$destSiteID)) #1 site at 1400 m
+length(unique(data_CH_Calanda_2_CD$Elevation)) #1
+
+data_CH_Calanda_2_CD %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_2_CD_clean <- data_CH_Calanda_2_CD %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CH_Calanda_2_CD_clean)#303 16
+
+# régression
+lm_CD <- lm(logDelta2 ~ logN, data = data_CH_Calanda_2_CD_clean)
+summary(lm_CD)
+
+#quatifier les colonizers
+data_CH_Calanda_2_CD_status <- data_CH_Calanda_2_CD %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CH_Calanda_2_CD_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+
+data_CH_Calanda_2_CD_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_Cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_2_CD_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CH_Calanda_2_CD_Corrected <- data_CH_Calanda_2_CD_status %>%
+  mutate(
+    delta2_Corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_Corrected = log10(delta2_Corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CH_Calanda_2_CD_Corrected$logDelta2_Corrected))
+
+lm_CD_Corrected <- lm(logDelta2_Corrected ~ logN, 
+                       data = data_CH_Calanda_2_CD_Corrected)
+
+summary(lm_CD_Corrected)
+
+#plot
+data_CH_Calanda_2_CD_Corrected <- data_CH_Calanda_2_CD_Corrected %>%
+  mutate(destSiteID =recode(destSiteID, "Nes" = "Nes-1400m"))
+
+(CH_Calanda_2_Control_D <- data_CH_Calanda_2_CD_Corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_Corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CD_Corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CD_Corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CH_Calanda_2 — Control Destination",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+```
+
+###warm
+```{r}
+data_CH_Calanda_2_warm <- data_CH_Calanda_2 %>% filter(Treatment =="warm")
+
+length(unique(data_CH_Calanda_2_warm)) #16
+data_CH_Calanda_2_warm$delta_years #2 but actually it's from  2017 to 2019 "3 years) : 2019-2017 = 2
+
+dim(data_CH_Calanda_2_warm) # 301 16
+length(unique(data_CH_Calanda_2_warm$Species)) #47
+# et combien de plots control origin?
+length(unique(data_CH_Calanda_2_warm$destPlotID)) #10
+length(unique(data_CH_Calanda_2_warm$destSiteID)) #1
+length(unique(data_CH_Calanda_2_warm$Elevation)) #1
+
+data_CH_Calanda_2_warm %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_2_warm_clean <- data_CH_Calanda_2_warm %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CH_Calanda_2_warm_clean)#[1] 297  16
+
+# régression
+lm_warm <- lm(logDelta2 ~ logN, data = data_CH_Calanda_2_warm_clean)
+summary(lm_warm)
+
+#quatifier les colonizers
+data_CH_Calanda_2_warm_status <- data_CH_Calanda_2_warm %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CH_Calanda_2_warm_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+
+data_CH_Calanda_2_warm_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CH_Calanda_2_warm_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CH_Calanda_2_warm_corrected <- data_CH_Calanda_2_warm_status %>%
+  mutate(
+    delta2_corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_corrected = log10(delta2_corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CH_Calanda_2_warm_corrected$logDelta2_corrected))
+
+lm_warm_corrected <- lm(logDelta2_corrected ~ logN, 
+                       data = data_CH_Calanda_2_warm_corrected %>%
+                       filter(is.finite(logN)))
+
+summary(lm_warm_corrected)
+
+#plot
+data_CH_Calanda_2_warm_corrected <- data_CH_Calanda_2_warm_corrected %>%
+  mutate(destSiteID =recode(destSiteID, "Cal" = "Cal-2000m", "Nes" = "Nes-1400m"))
+
+(CH_Calanda_2_warm <- data_CH_Calanda_2_warm_corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CH_Calanda_2 — Warm",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+
+ggarrange(CH_Calanda_2_control_O , CH_Calanda_2_Control_D , CH_Calanda_2_warm, legend = "bottom", common.legend = T )
+```
+
+
+##*CN_Heibei*
+
+###control_origin
+```{r}
+data_CN_Heibei <-data %>% filter(Region == "CN_Heibei")
+
+dim(data_CN_Heibei) #326  16
+
+names(data_CN_Heibei)
+unique(data_CN_Heibei$destPlotID)
+
+data_CN_Heibei_CO <- data_CN_Heibei %>% filter(Treatment =="Control_origin")
+
+length(unique(data_CN_Heibei_CO)) #16
+data_CN_Heibei_CO$delta_years #9
+
+dim(data_CN_Heibei_CO) #115  16
+length(unique(data_CN_Heibei_CO$Species)) #32
+# et combien de plots control origin?
+length(unique(data_CN_Heibei_CO$destPlotID)) #6
+length(unique(data_CN_Heibei_CO$destSiteID)) #2
+length(unique(data_CN_Heibei_CO$Elevation)) #2
+
+A<-data_CN_Heibei_CO %>% filter(destSiteID == "3400")
+unique(A$destPlotID)
+ # [1] "3400_3400_1" "3400_3400_2" "3400_3400_3"
+
+#en gros si j'ai bien compris, il y a dans cette region, 2 sites de "control_origin" à deux altitudes différentes, pour lesquels on a des répétition : 3 desstPLot pour chque destSite.
+
+#comme dans chisholm on ne prend pas en compte l'immigration, si une espèce est absente au temps iniital alors log(0-Nt+1) = c'est pas grave c'est log(Nt+1) non? on a pas de -inf
+
+data_CN_Heibei_CO %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+# 
+#  A tibble: 1 × 4
+#   n_inf_logN n_inf_logDelta2 n_zero_initial n_zero_delta2
+#        <int>           <int>          <int>         <int>
+# 1          0              98              0            98
+
+data_CN_Heibei_CO_clean <- data_CN_Heibei_CO %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CN_Heibei_CO_clean)#[1] 392  16
+
+# régression
+lm_CO <- lm(logDelta2 ~ logN, data = data_CN_Heibei_CO_clean)
+summary(lm_CO)
+
+#mais il y a deux elevations! on sépare
+data_CN_Heibei_CO_clean %>% #ca sert a quoi de savoir ca?
+  group_by(destSiteID) %>%
+  summarise(
+    n = n(),
+    mean_logN = mean(logN),
+    mean_logDelta2 = mean(logDelta2)
+  )
+
+# et régression séparée par site
+lm_CO_3400 <- lm(logDelta2 ~ logN, 
+                data = data_CN_Heibei_CO_clean %>% 
+                filter(destSiteID == "3400"))
+
+lm_CO_3800 <- lm(logDelta2 ~ logN, 
+                  data = data_CN_Heibei_CO_clean %>% 
+                  filter(destSiteID == "3800"))
+
+summary(lm_CO_3400) #1.29
+summary(lm_CO_3800) #1.54
+
+#quatifier les colonizers
+data_CN_Heibei_CO_status <- data_CN_Heibei_CO %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CN_Heibei_CO_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+# 
+# A tibble: 2 × 3
+#   status          n   pct
+#   <chr>       <int> <dbl>
+# 1 disappeared    93  19.0
+# 2 persistent    397  81.0 #therefore no colonizers!
+
+data_CN_Heibei_CO_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CN_Heibei_CO_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CN_Heibei_CO_corrected <- data_CN_Heibei_CO_status %>%
+  mutate(
+    logN = log10(Abs_Cover_initial),
+    delta2_corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_corrected = log10(delta2_corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CN_Heibei_CO_corrected$logDelta2_corrected))
+
+lm_CO_corrected <- lm(logDelta2_corrected ~ logN, 
+                       data = data_CN_Heibei_CO_corrected)
+
+summary(lm_CO_corrected)
+
+# et régression séparée par site
+lm_CO_3400<- lm(logDelta2_corrected ~ logN, 
+                data = data_CN_Heibei_CO_corrected %>% 
+                filter(destSiteID == "3400"))
+
+lm_CO_3800 <- lm(logDelta2_corrected ~ logN, 
+                  data = data_CN_Heibei_CO_corrected %>%
+                  filter(destSiteID == "3800"))
+
+summary(lm_CO_3400) #0.94
+summary(lm_CO_3800) #2.02
+#
+#plot
+
+(CN_Heibei_control_O <- data_CN_Heibei_CO_corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CN_Heibei — Control Origin",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+```
+
+###control_dest
+```{r}
+data_CN_Heibei <-data %>% filter(Region == "CN_Heibei")
+
+dim(data_CN_Heibei) #326  16
+
+names(data_CN_Heibei)
+unique(data_CN_Heibei$destPlotID)
+
+data_CN_Heibei_CD <- data_CN_Heibei %>% filter(Treatment =="Control_dest")
+
+length(unique(data_CN_Heibei_CD)) #16
+data_CN_Heibei_CD$delta_years #9
+
+dim(data_CN_Heibei_CD) #52 16
+length(unique(data_CN_Heibei_CD$Species)) #18
+# et combien de plots control origin?
+length(unique(data_CN_Heibei_CD$destPlotID)) #3
+length(unique(as.factor(data_CN_Heibei_CD$destSiteID))) #1
+length(unique(data_CN_Heibei_CD$Elevation)) #2
+
+data_CN_Heibei_CD %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CN_Heibei_CD_clean <- data_CN_Heibei_CD %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CN_Heibei_CD_clean)#[1] 52  16
+
+# régression
+lm_CD_3200 <- lm(logDelta2 ~ logN, data = data_CN_Heibei_CD_clean)
+summary(lm_CD)
+
+
+summary(lm_CD_3200) #2.17
+
+
+#quatifier les colonizers
+data_CN_Heibei_CD_status <- data_CN_Heibei_CD %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CN_Heibei_CD_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+# 
+# A tibble: 2 × 3
+#   status          n   pct
+#   <chr>       <int> <dbl>
+# 1 disappeared    93  19.0
+# 2 persistent    397  81.0 #therefore no colonizers!
+
+data_CN_Heibei_CD_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_Cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CN_Heibei_CD_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CN_Heibei_CD_Corrected <- data_CN_Heibei_CD_status %>%
+  mutate(
+    logN = log10(Abs_Cover_initial),
+    delta2_Corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_Corrected = log10(delta2_Corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CN_Heibei_CD_Corrected$logDelta2_Corrected))
+
+lm_CD_Corrected <- lm(logDelta2_Corrected ~ logN, 
+                       data = data_CN_Heibei_CD_Corrected)
+
+summary(lm_CD_Corrected)
+
+lm_CD_3200 <- lm(logDelta2_Corrected ~ logN, 
+                  data = data_CN_Heibei_CD_Corrected %>%
+                  filter(destSiteID == "3200"))
+
+summary(lm_CD_3200) #2.17
+#
+#plot
+
+(CN_Heibei_Control_O <- data_CN_Heibei_CD_Corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_Corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CD_Corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CD_Corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CN_Heibei — Control dest 3200",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+```
+
+###warm
+```{r}
+data_CN_Heibei_warm <- data_CN_Heibei %>% filter(Treatment =="warm")
+
+length(unique(data_CN_Heibei_warm)) #16
+data_CN_Heibei_warm$delta_years #9
+
+dim(data_CN_Heibei_warm) #159  16
+length(unique(data_CN_Heibei_warm$Species)) #32
+# et combien de plots control origin?
+length(unique(data_CN_Heibei_warm$destPlotID)) #9
+length(unique(data_CN_Heibei_warm$destSiteID)) #2
+length(unique(data_CN_Heibei_warm$Elevation)) #2
+
+data_CN_Heibei_warm %>%
+  summarise(
+    n_inf_logN = sum(is.infinite(logN)),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2)),
+    n_zero_initial = sum(Abs_Cover_initial == 0), 
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CN_Heibei_warm_clean <- data_CN_Heibei_warm %>%
+  filter(is.finite(logN) & is.finite(logDelta2))
+
+dim(data_CN_Heibei_warm_clean)#[1]  155  16
+
+# régression
+lm_warm <- lm(logDelta2 ~ logN, data = data_CN_Heibei_warm_clean)
+summary(lm_warm)
+
+#mais il y a deux elevations! on sépare
+data_CN_Heibei_warm_clean %>% #ca sert a quoi de savoir ca?
+  group_by(destSiteID) %>%
+  summarise(
+    n = n(),
+    mean_logN = mean(logN),
+    mean_logDelta2 = mean(logDelta2)
+  )
+
+# et régression séparée par site
+lm_warm_3200 <- lm(logDelta2 ~ logN, 
+                data = data_CN_Heibei_warm_clean %>% 
+                filter(destSiteID == "3200"))
+
+lm_warm_3400 <- lm(logDelta2 ~ logN, 
+                  data = data_CN_Heibei_warm_clean %>% 
+                  filter(destSiteID == "3400"))
+
+summary(lm_warm_3200) #1.59
+summary(lm_warm_3400) #1.67
+
+#quatifier les colonizers
+data_CN_Heibei_warm_status <- data_CN_Heibei_warm %>%
+  mutate(status = case_when(
+    Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+    Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+    Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+    TRUE ~ "absent"
+  ))
+
+# combien de chaque?
+data_CN_Heibei_warm_status %>%
+  group_by(status) %>%
+  summarise(n = n(), pct = n()/nrow(.)*100)
+
+data_CN_Heibei_warm_status %>%
+  filter(status == "disappeared") %>%
+  summarise(
+    n = n(),
+    mean_cover_initial = mean(Abs_Cover_initial),
+    mean_delta2 = mean(delta2_Abs_Cover),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0)
+  )
+
+data_CN_Heibei_warm_status %>%
+  group_by(status) %>%
+  summarise(
+    n_total = n(),
+    n_zero_delta2 = sum(delta2_Abs_Cover == 0),
+    n_inf_logDelta2 = sum(is.infinite(logDelta2))
+  )
+
+
+data_CN_Heibei_warm_corrected <- data_CN_Heibei_warm_status %>%
+  mutate(
+    delta2_corrected = delta2_Abs_Cover + 0.00120,
+    logDelta2_corrected = log10(delta2_corrected)
+  )
+
+# vérifier qu'il n'y a plus de -Inf
+sum(is.infinite(data_CN_Heibei_warm_corrected$logDelta2_corrected))
+
+lm_warm_corrected <- lm(logDelta2_corrected ~ logN, 
+                       data = data_CN_Heibei_warm_corrected %>%
+                       filter(is.finite(logN)))
+
+summary(lm_warm_corrected)
+
+# et régression séparée par site
+lm_warm_3200 <- lm(logDelta2_corrected ~ logN, 
+                data = data_CN_Heibei_warm_corrected %>%
+                       filter(is.finite(logN)) %>%
+                filter(destSiteID == "3200"))
+
+lm_warm_3400 <- lm(logDelta2_corrected ~ logN, 
+                data = data_CN_Heibei_warm_corrected %>%
+                       filter(is.finite(logN)) %>%
+                filter(destSiteID == "3400"))
+
+summary(lm_warm_3200) #1.44
+summary(lm_warm_3400) #1.77
+
+#plot
+
+(CN_Heibei_warm <- data_CN_Heibei_warm_corrected %>%
+     filter(is.finite(logN)) %>%
+     ggplot(aes(x = logN, y = logDelta2_corrected, color = status)) +
+     geom_point(alpha = 0.5) +
+     geom_smooth(method = "lm", se = TRUE, color = "black") +
+     geom_abline(slope = 1, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "gold", 
+                 label = "demographic", linewidth=1.8) +
+     geom_abline(slope = 2, intercept = coef(lm_CO_corrected)[1], 
+                 linetype = "dashed", color = "darkolivegreen2", linewidth=1.8) +
+    scale_color_manual(values = c(disappeared = "coral2",
+    persistent = "grey"))+
+     facet_wrap(~destSiteID) +
+     labs(
+         title = "CN_Heibei — Warm",
+         x = "log10(Abs_Cover_initial)",
+         y = "log10(ΔN² + ε)",
+         caption = "yellow dashed = slope 1 (demographic), green dashed = slope 2 (environmental)"
+     ) +
+     theme_minimal())
+```
+
+
+
+
+#boucle?
+
+```{r}
+
+regions <- unique(data$Region)
+
+all_results <- data.frame()
+
+for (i in regions) {
+  
+  data_region <- data %>% filter(Region == i)
+  
+  results <- data_region %>%
+    group_by(Treatment,  originSiteID, destSiteID) %>%
+    group_modify(~ {
+      df <- .x %>%
+        mutate(
+          status = case_when(
+            Abs_Cover_initial > 0 & Abs_Cover_final > 0 ~ "persistent",
+          #  Abs_Cover_initial == 0 & Abs_Cover_final > 0 ~ "colonizer",
+            Abs_Cover_initial > 0 & Abs_Cover_final == 0 ~ "disappeared",
+            TRUE ~ "absent"
+          ),
+          delta2_corrected    = delta2_Abs_Cover + 0.00120,
+          logDelta2_corrected = log10(delta2_corrected)
+        ) %>%
+        filter(is.finite(logN))
+      
+      # plots par site
+      plots    <- paste(sort(unique(df$destPlotID)), collapse = ", ")
+      n_plots  <- length(unique(df$destPlotID))
+      n_species <- length(unique(df$Species))
+      
+      # --- NEW: summarise PlotSize and delta_years ---
+      # If PlotSize is constant within a plot, take the unique value;
+      # if it varies (multiple plot sizes at a site), take the mean.
+      mean_plot_size  <- mean(df$PlotSize,    na.rm = TRUE)
+      mean_delta_years <- mean(df$delta_years, na.rm = TRUE)
+      mean_delta_temp <- mean(df$delta_temp, na.rm = T)
+      
+      # If you expect them to be strictly constant per group, 
+      # you can instead use:
+      #   unique(df$PlotSize)  — but this will error if not truly unique
+      #   df$PlotSize[1]       — silently takes first value (risky)
+      # mean() is the safest general choice.
+      
+      # status summary
+      status_summary <- df %>%
+        count(status) %>%
+        pivot_wider(names_from  = status,
+                    values_from = n,
+                    values_fill = 0)
+      
+      n_persistent  <- status_summary$persistent  %||% 0
+      n_disappeared <- status_summary$disappeared %||% 0
+     # n_colonizer   <- status_summary$colonizer   %||% 0
+      
+      # regression
+      mod   <- lm(logDelta2_corrected ~ logN, data = df)
+      slope <- coef(mod)["logN"]
+      intercept <- coef(mod)["(Intercept)"]
+      se_slope    <- summary(mod)$coefficients["logN", "Std. Error"]
+      se_intercept <- summary(mod)$coefficients["(Intercept)", "Std. Error"]
+      r2    <- summary(mod)$r.squared
+      n_obs <- nrow(df)
+      
+      tibble(
+        # --- site descriptors ---
+        n_plots          = n_plots,
+        plots            = plots,
+        n_species        = n_species,
+        n_obs            = n_obs,
+        
+        # --- NEW variables ---
+        mean_plot_size   = round(mean_plot_size,   4),
+        mean_delta_years = round(mean_delta_years, 2),
+        mean_delta_temp = round(mean_delta_temp, 3),
+        
+        # --- regression results ---
+        slope            = round(slope,  3),
+        intercept        = round(intercept, 3),
+        se_slope         = round(se_slope,     3),
+        se_intercept     = round(se_intercept,     3),
+        ci_low_slope     = round(confint(mod, parm = "logN")[1]),
+        ci_high_slope    = round(confint(mod, parm = "logN")[2]),
+        ci_low_intercept = round(confint(mod, parm = "(Intercept)")[1]),
+        ci_high_intercept= round(confint(mod, parm = "(Intercept)")[2]),
+        r2               = round(r2,     3),
+        
+        # --- species dynamics ---
+        n_persistent     = n_persistent,
+        n_disappeared    = n_disappeared,
+       # n_colonizer      = n_colonizer,
+        pct_disappeared  = round(n_disappeared /
+                             (n_persistent + n_disappeared) * 100, 1)
+      )
+    }) %>%
+    mutate(Region = i) %>%
+    relocate(Region)
+  all_results <- rbind(all_results, results)
+  
+}
+
+slopes_table <- all_results
+
+# Aperçu
+slopes_table %>%
+  dplyr::select(Region, Treatment, originSiteID, destSiteID,
+                n_plots, n_species, slope, intercept, ci_low_slope, ci_high_slope, 
+                r2, pct_disappeared) %>%
+  print(n = 100)
+
+# Sauvegarder
+write.csv(slopes_table, here("intermediate data", "chisholm_slopes_by_site.csv"))
+
+
+```
+
+
+#one big plot - slope
+```{r}
+
+
+slope_plot <- slopes_table %>%
+  mutate(site_label = paste0(destSiteID)) %>%
+  ggplot(aes(x = site_label, y = slope, 
+             color = Treatment, shape = Treatment)) +
+  geom_hline(yintercept = 1, linetype = "dashed",
+             color = "gold", linewidth = 1.2) +
+  geom_hline(yintercept = 2, linetype = "dashed",
+             color = "darkolivegreen2", linewidth = 1.2) +
+  geom_pointrange(aes(ymin = ci_low_slope, ymax = ci_high_slope),
+                  position = position_dodge(width = 0.5),
+                  size = 0.7, linewidth = 0.8) +
+  scale_color_manual(
+    values = c(
+      "warm"           = "firebrick1",
+      "Control_origin" = "dodgerblue",
+      "Control_dest"   = "orange"
+    )
+  ) +
+  scale_shape_manual(
+    values = c(
+      "warm"           = 17,
+      "Control_origin" = 16,
+      "Control_dest"   = 15
+    )
+  ) +
+  facet_wrap(~ Region, scales = "free_x", ncol = 7) +
+  labs(
+    title = "Variance scaling slopes by region, site and treatment",
+    x = NULL,
+    y = "Slope (logΔN² ~ logN)",
+    color = "Treatment",
+    shape = "Treatment"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    plot.title  = element_text(face = "bold"),
+    legend.position = "bottom",
+    strip.text  = element_text(face = "bold"),
+    panel.grid.major.x = element_line(color = "grey90")
+  )
+
+ggsave(slope_plot, filename= "./Figures/slopes_plot.jpeg", width =10, height = 6)
+
+```
+
+#Models - slope
+```{r}
+#It is good practice to standardise your explanatory variables before proceeding, so that they have a mean of zero and standard deviation of one. It ensures that the estimated coefficients are all on the same scale, making it easier to compare effect sizes (and it improves model convergence). You can use scale() to do that. It is good practice to standardise your explanatory variables before proceeding, so that they have a mean of zero and standard deviation of one. It ensures that the estimated coefficients are all on the same scale, making it easier to compare effect sizes (and it improves model convergence). You can use scale() to do that
+
+slopes_table$Elevation <- scale(slopes_table$Elevation)
+slopes_table$mean_plot_size <- scale(slopes_table$mean_plot_size)
+slopes_table$mean_delta_years <- scale(slopes_table$mean_delta_years)
+
+
+
+model_full <- lmer(slope ~ Treatment + Elevation + mean_delta_years + mean_plot_size + (1| Region), data= slopes_table)
+summary(model_full)
+
+stargazer(model_full, type = "text",
+         digits = 3,
+         star.cutoffs = c(0.05, 0.01, 0.001),
+         digit.separator = "")
+
+plot(model_full)
+qqnorm(resid(model_full))
+qqline(resid(model_full))
+
+(model_full_emmeans<- emmeans(model_full, ~ Treatment))
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(model_full, terms = c("Treatment"))  # this gives overall predictions for the model
+
+
+#pourquoi pred.mm c'est adjusted for? Et c'est 0? car on a scale avant donc les prédictions representent la valeur estimée de la pente pour chaque traitment quand toutes les covariables sont à leur moyennes, o, car elles ont ete scales
+
+# Plot the predictions 
+
+(ggplot(pred.mm) + 
+   geom_point(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_boxplot(data = slopes_table,                      # adding the raw data (scaled values)
+              aes(x = Treatment, y = slope, fill = Treatment)) + 
+   scale_fill_manual(
+    values = c(
+      "warm"           = "firebrick1",
+      "Control_origin" = "dodgerblue",
+      "Control_dest"   = "orange"
+    )
+  ) +
+   labs(x = "", y = "slope") + 
+   theme_minimal(base_size = 17)
+)
+
+
+########################################################      ELEVATION            ######################
+
+model_elevation1<- lm(slope ~Elevation, data= slopes_table)
+summary(model_elevation1)#pas d'effet
+
+#####################################################################  YEARS ##################
+model_time <- lm(slope ~mean_delta_years, data=slopes_table) 
+summary(model_time)#pas d'effet
+
+#####################################################################  Plotsize ##################
+
+model_plotsize <- lm(slope ~mean_plot_size, data=slopes_table) 
+summary(model_plotsize)#there is an effect but weak p=0.045, R² = 0.048
+
+model_plotsize_dest <- lm(slope ~mean_plot_size, data=slopes_table %>% filter(Treatment == "Control_dest")) 
+summary(model_plotsize_dest)#no effect
+
+model_plotsize_origin <- lm(slope ~mean_plot_size, data=slopes_table %>% filter(Treatment == "Control_origin")) 
+summary(model_plotsize_origin)#marginal
+
+model_plotsize_warm <- lm(slope ~mean_plot_size, data=slopes_table %>% filter(Treatment == "warm")) 
+summary(model_plotsize_warm)#noeffect
+
+#################################################################################################
+
+```
+
+##warm case: magnitude of temperature increase
+```{r}
+
+#slopes_table$mean_delta_temp <- scale(slopes_table$mean_delta_temp) don't need to scale : Coefficient = change in slope per 1°C increase in delta_temp "a 1°C changes the slope by XX" et j'ai que un prédicteur donc j'ai pas besoin de comaprer dans la meme unitée les effect sizes across predictors (change in slope per 1SD increase in delta temp)
+
+model_temp_warm <- lm(slope ~mean_delta_temp, data=slopes_table ) 
+summary(model_temp_warm)
+
+#plot
+
+slopes_table %>%
+  filter(Treatment == "warm")%>%
+  ggplot()+
+  geom_point(aes(x = mean_delta_temp, y = slope))+
+  labs(x= "Magnitude temperature increase", y= "slope")+
+  geom_hline(yintercept = 1, color ="gold", linewidth =1.6)+
+  geom_hline(yintercept = 2, color= "darkolivegreen2", linewidth=1.6)+
+  theme_minimal()
+
+#no significant effect of temperature magnitude on slope
+```
+
+
+Linear mixed model fit by REML ['lmerMod']
+Formula: slope ~ Treatment + Elevation + mean_delta_years + mean_plot_size +      (1 | Region)
+   Data: slopes_table
+
+REML criterion at convergence: 94
+
+Scaled residuals: 
+     Min       1Q   Median       3Q      Max 
+-2.25324 -0.41802  0.09731  0.53133  2.29526 
+
+Random effects:
+ Groups   Name        Variance Std.Dev.
+ Region   (Intercept) *0.05358*  0.2315  *region explains 0.05/(0.05+0.191) = 22% de la variance totale*
+ Residual             0.19132  0.4374  
+Number of obs: 61, groups:  Region, 15
+
+Fixed effects:
+                        Estimate Std. Error t value
+(Intercept)              1.76275    0.12428  14.183 *control_dest slope at mean elevation, mean delta years and mean plotsize*
+TreatmentControl_origin -0.38916    0.15224  -2.556 *t value |t| > 2 means it's significant so control_origin significantly diff to control dest*
+Treatmentwarm           -0.11138    0.14114  -0.789 *non sign, similar to control dest*
+Elevation                0.12048    0.09279   1.298 *marginal positive trend*
+mean_delta_years         0.06818    0.09128   0.747 *no effect*
+mean_plot_size           0.06067    0.10201   0.595 *no effect*
+
+Correlation of Fixed Effects:
+            (Intr) TrtmC_ Trtmnt Elevtn mn_dl_
+TrtmntCntr_ -0.651                            
+Treatmntwrm -0.659  0.554                     
+Elevation    0.100 -0.296 -0.027              
+men_dlt_yrs  0.114 -0.081 -0.076 -0.048       
+mean_plt_sz -0.018  0.146  0.010 -0.448  0.318
+
+
+
+#Models - intercept
+```{r}
+#It is good practice to standardise your explanatory variables before proceeding, so that they have a mean of zero and standard deviation of one. It ensures that the estimated coefficients are all on the same scale, making it easier to compare effect sizes (and it improves model convergence). You can use scale() to do that
+
+slopes_table$Elevation <- scale(slopes_table$Elevation)
+slopes_table$mean_plot_size <- scale(slopes_table$mean_plot_size)
+slopes_table$mean_delta_years <- scale(slopes_table$mean_delta_years)
+
+
+model_full <- lmer(intercept ~ Treatment + Elevation + mean_delta_years + mean_plot_size + (1| Region), data= slopes_table)
+summary(model_full)
+
+stargazer(model_full, type = "text",
+         digits = 3,
+         star.cutoffs = c(0.05, 0.01, 0.001),
+         digit.separator = "")
+
+plot(model_full)
+qqnorm(resid(model_full))
+qqline(resid(model_full))
+
+(model_full_emmeans<- emmeans(model_full, ~ Treatment))
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(model_full, terms = c("Treatment"))  # this gives overall predictions for the model
+
+# Plot the predictions 
+
+(ggplot(pred.mm) + 
+   geom_point(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_boxplot(data = slopes_table,                      # adding the raw data (scaled values)
+              aes(x = Treatment, y = intercept, fill = Treatment)) + 
+   scale_fill_manual(
+    values = c(
+      "warm"           = "firebrick1",
+      "Control_origin" = "dodgerblue",
+      "Control_dest"   = "orange"
+    )
+  ) +
+   labs(x = "", y = "intercept") + 
+   theme_minimal(base_size = 17)
+)
+
+```
+
+Linear mixed model fit by REML ['lmerMod']
+Formula: intercept ~ Treatment + Elevation + mean_delta_years + mean_plot_size +      (1 | Region)
+   Data: slopes_table
+
+REML criterion at convergence: 89.1
+
+Scaled residuals: 
+    Min      1Q  Median      3Q     Max 
+-2.8469 -0.4162 -0.0940  0.4751  3.5325 
+
+Random effects:
+ Groups   Name        Variance Std.Dev.
+ Region   (Intercept) 0.01656  0.1287  *region accounts for (0.01656/(0.01656+0.19124)) = 7.969201 %*
+ Residual             0.19124  0.4373  
+Number of obs: 61, groups:  Region, 15
+
+Fixed effects:
+                        Estimate Std. Error t value
+(Intercept)             -0.31152    0.11322  -2.752 *control_dest intercept at mean elevation, mean delta years and mean plotsize*
+TreatmentControl_origin  0.19790    0.14972   1.322 *marginal positive trend*
+Treatmentwarm            0.26427    0.14100   1.874 *marginal positive trend*
+Elevation               -0.06645    0.07641  -0.870 *ns*
+mean_delta_years        -0.05941    0.07259  -0.818 *ns*
+mean_plot_size           0.08507    0.08213   1.036 *ns*
+
+Correlation of Fixed Effects:
+            (Intr) TrtmC_ Trtmnt Elevtn mn_dl_
+TrtmntCntr_ -0.715                            
+Treatmntwrm -0.722  0.557                     
+Elevation    0.101 -0.245 -0.013              
+men_dlt_yrs  0.112 -0.107 -0.096 -0.059       
+mean_plt_sz -0.042  0.136  0.004 -0.479  0.340
+
+
+#Rare/Common species - abundance
+
+calcul de lm(logDelta2_corrected ~ logN, data = df)  pour les rares et les communes. voir si les communes plus proche de 2 et rare plus proche de 1. 
+
+different scales of rarity 
+
+global - all region confondues - *all pays*
+
+per *country*
+
+per *region*
+
+Per *gradient* (“per experiment” = group control_O, control_D and warm)--> la meme chose que region, non?
+
+per *site* 
+
+abundance in terms of (i) total_cover - mean_cover and (ii) frequency
+
+#function?
+```{r}
+fit_slope <- function(df) {
+  df <- df %>%
+    mutate(
+      delta2_corrected    = delta2_Abs_Cover + 0.00120, #seuile pour ne pas avoir log10(0) = -Inf
+      logDelta2_corrected = log10(delta2_corrected)
+    ) %>%
+    filter(is.finite(logN), is.finite(logDelta2_corrected)) #on retire s'il y a -inf, plutot pour logN, vu que pour logdelta2 à été corrected
+  
+   if (nrow(df) < 3) return(tibble(slope = NA_real_, r2 = NA_real_, n_obs = nrow(df)))#ne pas faire une regression avec moins de 3 points
+  
+  mod <- lm(logDelta2_corrected ~ logN, data = df)
+  tibble(
+    slope = coef(mod)["logN"],
+    CI_low = confint(mod)[2],
+    CI_high = confint(mod)[4],
+    r2    = summary(mod)$r.squared,
+    n_obs = nrow(df)
+  )
+}
+```
+
+#3 methods 
+```{r}
+
+test<- c(4,6,NA, NA)
+
+#methode 1 : divise par le nombre de non-NA
+mean(test, na.rm=T)  
+
+#methode 2: divise par le nombre total (donc on inclu les NA)
+sum(test, na.rm=T)/ length(test)  
+
+#parceque ca donne que des NA ca:
+mean(test, na.rm=F)
+```
+
+
+## Global 
+
+Pour définir les espèces rares vs communes :
+
+* je divise en parts égales avec les quantiles: quantile à 10% et quantile à 90%
+
+* sauf que parfois le Q10 ou Q90 exact tombe sur une valeur de cover qui est partagée par plusieurs espèces. on a des exeaquo.
+
+* après quand on rassemble avec le data, left_join avec data, on récupère toutes les lignes de chaque espèce. et une espèce A n'a plus qu'une ligne (ex. pour les rares), et espèce B peut en avoir 40 (+ communes). Donc on a un dés-équilibre qui se crée. donc on aura quand meme plus de précision sur les confint des espèces communes, car il y en aura plus!
+
+
+1-faire mean() avec 0
+2-faire mean() sans 0
+3-sum() normalement très corrélé avec la somme
+4-et faire féquence
+
+```{r}
+mat_wide <- data %>%
+  filter(Treatment == "warm") %>%
+  pivot_wider(id_cols = destPlotID, names_from = Species, 
+              values_from = Abs_Cover_initial, values_fn = mean)
+
+mat_species <- mat_wide %>% ungroup() %>% select(-destPlotID)
+
+#warm data-----------
+
+#with NA (na.rm= F) en fait ca marche pas car tout devient NA et toutes les espèces deviennent des intermediaires.
+mean_with_NA<- mat_species%>%
+   summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE) / length(x)))%>% #les NA comptent dans le dénominateur 
+   pivot_longer(cols=everything() ,names_to = "Species",values_to = "total_cover_global_with_NA" )%>%
+  mutate(
+    q10 = quantile(total_cover_global_with_NA, 0.10),
+    q90 = quantile(total_cover_global_with_NA, 0.90),
+    rarity_global_mean_with_NA = case_when(
+      total_cover_global_with_NA <= q10 ~ "rare",
+      total_cover_global_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, rarity_global_mean_with_NA, total_cover_global_with_NA)
+
+# wihtout NA: moyenne sur présences uniquement 
+mean_without_NA<- mat_species %>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(cols = everything(), names_to = "Species", values_to = "total_cover_global_without_NA")%>%
+  mutate(
+    q10 = quantile(total_cover_global_without_NA, 0.10),
+    q90 = quantile(total_cover_global_without_NA, 0.90),
+    rarity_global_mean_without_NA = case_when(
+      total_cover_global_without_NA <= q10 ~ "rare",
+      total_cover_global_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, rarity_global_mean_without_NA, total_cover_global_without_NA)
+
+rarity_global_abund<- left_join(mean_with_NA, mean_without_NA, by = "Species")
+
+#frequence
+global_cover_warm_freq <- data %>%
+  filter(Treatment == "warm")%>%
+  group_by(Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_global_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, n_plot_presence, rarity_global_freq)
+
+rarity_global_warm<- left_join(rarity_global_abund, global_cover_warm_freq , by = "Species")
+
+#y-a-til une espèce qui est commune dans une categorie mais devient rare dans une autre?
+diff_warm <- rarity_global_warm %>%
+  filter(rarity_global_mean_with_NA != rarity_global_freq |
+         rarity_global_mean_without_NA != rarity_global_freq |
+         rarity_global_mean_with_NA != rarity_global_mean_without_NA)
+
+#calculate the slope
+results_global_warm_mean_with_NA <- data %>%
+  filter(Treatment == "warm") %>%
+  left_join(mean_with_NA %>% select(Species, rarity_global_mean_with_NA), by = "Species") %>%
+  filter(rarity_global_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_mean_with_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance with NA",
+         Treatment = "warm")
+
+results_global_warm_mean_without_NA <- data %>%
+  filter(Treatment == "warm") %>%
+  left_join(rarity_global_warm %>% select(Species, rarity_global_mean_without_NA), by = "Species") %>%
+  filter(rarity_global_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_mean_without_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance without NA",
+         Treatment = "warm")
+
+results_global_warm_freq <- data %>%
+  filter(Treatment == "warm") %>%
+  left_join(rarity_global_warm %>% select(Species, rarity_global_freq), by = "Species") %>%
+  filter(rarity_global_freq %in% c("rare", "common")) %>%
+  group_by(rarity_global_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_freq)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Frequence",
+         Treatment = "warm")
+
+global_rarity_warm <- rbind(results_global_warm_mean_without_NA, results_global_warm_mean_with_NA,results_global_warm_freq )
+
+####AUTRE APPROCHE-je pense que c'est pas bon
+A_withoutNA<-data %>%
+  filter(Treatment == "warm") %>%
+  left_join(mean_with_NA %>% select(Species, rarity_global_mean_with_NA), by = "Species") %>%
+  filter(rarity_global_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_with_NA, Species) %>% 
+  summarise(
+    Abs_Cover_initial = mean(Abs_Cover_initial, na.rm = TRUE),
+    logN= mean(logN, na.rm=T),
+    delta2_Abs_Cover= mean(delta2_Abs_Cover, na.rm = TRUE)
+  ) %>%
+  group_by(rarity_global_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x))
+
+A_withNA <- data %>%
+  filter(Treatment == "warm") %>%
+  left_join(mean_without_NA %>% select(Species, rarity_global_mean_without_NA), by = "Species") %>%
+  filter(rarity_global_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_without_NA, Species) %>% 
+  summarise(
+    Abs_Cover_initial = sum(Abs_Cover_initial, na.rm = TRUE) / length(Abs_Cover_initial),
+    logN = sum(logN, na.rm = TRUE) / length(logN),
+    delta2_Abs_Cover = sum(delta2_Abs_Cover, na.rm = TRUE) / length(delta2_Abs_Cover)
+  ) %>%
+  group_by(rarity_global_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x))
+
+#control origin----------
+
+mat_wide <- data %>%
+  filter(Treatment == "Control_origin") %>%
+  pivot_wider(id_cols = destPlotID, names_from = Species, 
+              values_from = Abs_Cover_initial, values_fn = mean)
+
+mat_species <- mat_wide %>% ungroup() %>% select(-destPlotID)
+
+#with NA (na.rm= F) en fait ca marche pas car tout devient NA et toutes les espèces deviennent des intermediaires.
+mean_with_NA<- mat_species%>%
+   summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE) / length(x)))%>% #les NA comptent dans le dénominateur 
+   pivot_longer(cols=everything() ,names_to = "Species",values_to = "total_cover_global_with_NA" )%>%
+  mutate(
+    q10 = quantile(total_cover_global_with_NA, 0.10),
+    q90 = quantile(total_cover_global_with_NA, 0.90),
+    rarity_global_mean_with_NA = case_when(
+      total_cover_global_with_NA <= q10 ~ "rare",
+      total_cover_global_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, rarity_global_mean_with_NA, total_cover_global_with_NA)
+
+# wihtout NA: moyenne sur présences uniquement 
+mean_without_NA <-mat_species %>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(cols = everything(), names_to = "Species", values_to = "total_cover_global_without_NA")%>%
+  mutate(
+    q10 = quantile(total_cover_global_without_NA, 0.10),
+    q90 = quantile(total_cover_global_without_NA, 0.90),
+    rarity_global_mean_without_NA = case_when(
+      total_cover_global_without_NA <= q10 ~ "rare",
+      total_cover_global_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, rarity_global_mean_without_NA, total_cover_global_without_NA)
+
+rarity_global_abund<- left_join(mean_with_NA, mean_without_NA, by = "Species")
+
+
+#et maintenant avec la frequence
+global_cover_freq <- data %>%
+  filter(Treatment == "Control_origin")%>%
+  group_by(Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_global_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, n_plot_presence, rarity_global_freq)
+
+rarity_global<- left_join(rarity_global_abund, global_cover_freq , by = "Species")
+
+#y-a-til une espèce qui est commune dans une categorie mais devient rare dans une autre?
+diff_CO <- rarity_global %>%
+  filter(rarity_global_mean_with_NA != rarity_global_freq |
+         rarity_global_mean_without_NA != rarity_global_freq |
+         rarity_global_mean_with_NA != rarity_global_mean_without_NA)
+
+#calculate the slope
+results_global_mean_with_NA <- data %>%
+  filter(Treatment == "Control_origin") %>%
+  left_join(rarity_global %>% select(Species, rarity_global_mean_with_NA), by = "Species") %>%
+  filter(rarity_global_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_mean_with_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance with NA",
+         Treatment = "Control_origin")
+
+results_global_mean_without_NA <- data %>%
+  filter(Treatment == "Control_origin") %>%
+  left_join(rarity_global %>% select(Species, rarity_global_mean_without_NA), by = "Species") %>%
+  filter(rarity_global_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_mean_without_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance without NA",
+         Treatment = "Control_origin")
+
+results_global_freq <- data %>%
+  filter(Treatment == "Control_origin") %>%
+  left_join(rarity_global %>% select(Species, rarity_global_freq), by = "Species") %>%
+  filter(rarity_global_freq %in% c("rare", "common")) %>%
+  group_by(rarity_global_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_freq)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Frequence",
+         Treatment = "Control_origin")
+
+global_rarity_control_origin <- rbind(results_global_mean_without_NA, results_global_mean_with_NA,results_global_freq )
+
+
+#control destination-----------
+
+mat_wide <- data %>%
+  filter(Treatment == "Control_dest") %>%
+  pivot_wider(id_cols = destPlotID, names_from = Species, 
+              values_from = Abs_Cover_initial, values_fn = mean)
+
+mat_species <- mat_wide %>% ungroup() %>% select(-destPlotID)
+
+#with NA (na.rm= F) en fait ca marche pas car tout devient NA et toutes les espèces deviennent des intermediaires.
+mean_with_NA<- mat_species%>%
+   summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE) / length(x)))%>% #les NA comptent dans le dénominateur 
+   pivot_longer(cols=everything() ,names_to = "Species",values_to = "total_cover_global_with_NA" )%>%
+  mutate(
+    q10 = quantile(total_cover_global_with_NA, 0.10),
+    q90 = quantile(total_cover_global_with_NA, 0.90),
+    rarity_global_mean_with_NA = case_when(
+      total_cover_global_with_NA <= q10 ~ "rare",
+      total_cover_global_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, rarity_global_mean_with_NA, total_cover_global_with_NA)
+
+# wihtout NA: moyenne sur présences uniquement 
+mean_without_NA <-mat_species %>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(cols = everything(), names_to = "Species", values_to = "total_cover_global_without_NA")%>%
+  mutate(
+    q10 = quantile(total_cover_global_without_NA, 0.10),
+    q90 = quantile(total_cover_global_without_NA, 0.90),
+    rarity_global_mean_without_NA = case_when(
+      total_cover_global_without_NA <= q10 ~ "rare",
+      total_cover_global_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, rarity_global_mean_without_NA, total_cover_global_without_NA)
+
+rarity_global_abund<- left_join(mean_with_NA, mean_without_NA, by = "Species")
+
+
+#et maintenant avec la frequence
+global_cover_freq <- data %>%
+  filter(Treatment == "Control_dest")%>%
+  group_by(Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_global_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, n_plot_presence, rarity_global_freq)
+
+rarity_global<- left_join(rarity_global_abund, global_cover_freq , by = "Species")
+
+
+#y-a-til une espèce qui est commune dans une categorie mais devient rare dans une autre?
+diff_CD<- rarity_global %>%
+  filter(rarity_global_mean_with_NA != rarity_global_freq |
+         rarity_global_mean_without_NA != rarity_global_freq |
+         rarity_global_mean_with_NA != rarity_global_mean_without_NA)
+
+#calculate the slope
+results_global_mean_with_NA <- data %>%
+  filter(Treatment == "Control_dest") %>%
+  left_join(rarity_global %>% select(Species, rarity_global_mean_with_NA), by = "Species") %>%
+  filter(rarity_global_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_mean_with_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance with NA",
+         Treatment = "Control_dest")
+
+results_global_mean_without_NA <- data %>%
+  filter(Treatment == "Control_dest") %>%
+  left_join(rarity_global %>% select(Species, rarity_global_mean_without_NA), by = "Species") %>%
+  filter(rarity_global_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(rarity_global_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_mean_without_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance without NA",
+         Treatment = "Control_dest")
+
+results_global_freq <- data %>%
+  filter(Treatment == "Control_dest") %>%
+  left_join(rarity_global %>% select(Species, rarity_global_freq), by = "Species") %>%
+  filter(rarity_global_freq %in% c("rare", "common")) %>%
+  group_by(rarity_global_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_global_freq)%>%
+    mutate(Spatial_scale = "Global",
+         rarity_type = "Frequence",
+         Treatment = "Control_dest")
+
+global_rarity_control_dest <- rbind(results_global_mean_without_NA, results_global_mean_with_NA,results_global_freq)
+
+#combine ---------
+
+global_rarity <- rbind(global_rarity_control_origin, global_rarity_control_dest, global_rarity_warm)
+
+
+#plots ------------
+global_rarity2 %>%
+  ggplot(aes(x=Treatment, y=slope, color= Species))+
+  geom_point(aes(x= Treatment, y= slope))+
+  geom_pointrange(aes(x=Treatment, ymin = CI_low, ymax = CI_high))+
+  geom_hline(yintercept = 1, color= "gold", linetype= "dashed", linewidth= 1.6)+
+  geom_hline(yintercept = 2, color= "darkolivegreen2", linetype = "dashed", linewidth =1.6)+
+  facet_wrap(~rarity_type)+
+  theme_minimal(base_size = 16)+
+  ggtitle("Rarity at global scale")+
+  theme(axis.text.x = element_text(angle = 30), 
+        legend.position = "bottom")
+
+#fonction?-----------------
+
+compute_global_rarity <- function(data, treatment) {
+  mat_species<- data %>%
+    filter(Treatment == treatment) %>%
+    pivot_wider(id_cols = destPlotID, names_from = Species,
+                values_from = Abs_Cover_initial, values_fn = mean) %>%
+        select(-destPlotID)
+  
+  ##with NA 
+mean_with_NA<- mat_species%>%
+   summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE) / length(x)))%>% #les NA comptent dans le dénominateur 
+   pivot_longer(cols=everything() ,names_to = "Species",values_to = "total_cover_with_NA" )%>%
+  mutate(
+    q10 = quantile(total_cover_with_NA, 0.10),
+    q90 = quantile(total_cover_with_NA, 0.90),
+    rarity_with_NA = case_when(
+      total_cover_with_NA <= q10 ~ "rare",
+      total_cover_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, rarity_with_NA, total_cover_with_NA)
+
+# wihtout NA:
+mean_without_NA<- mat_species %>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(cols = everything(), names_to = "Species", values_to = "total_cover_without_NA")%>%
+  mutate(
+    q10 = quantile(total_cover_without_NA, 0.10),
+    q90 = quantile(total_cover_without_NA, 0.90),
+    rarity_mean_without_NA = case_when(
+      total_cover_without_NA <= q10 ~ "rare",
+      total_cover_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, rarity_mean_without_NA, total_cover_without_NA)
+
+rarity_abund<- left_join(mean_with_NA, mean_without_NA, by = "Species")
+
+#frequence
+rarity_freq <- data %>%
+  filter(Treatment == treatment)%>%
+  group_by(Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, n_plot_presence, rarity_freq)
+  
+
+ rarity <- left_join(mean_with_NA, mean_without_NA, by = "Species") %>%
+    left_join(rarity_freq, by = "Species")
+
+#calculate the slope
+results_with_NA <- data %>%
+  filter(Treatment == treatment) %>%
+  left_join(mean_with_NA %>% select(Species, rarity_with_NA), by = "Species") %>%
+  filter(rarity_with_NA %in% c("rare", "common")) %>%
+  group_by(rarity_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_with_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance with NA",
+         Treatment = treatment)
+
+results_without_NA <- data %>%
+  filter(Treatment == treatment) %>%
+  left_join(mean_without_NA %>% select(Species, rarity_mean_without_NA), by = "Species") %>%
+  filter(rarity_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(rarity_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_mean_without_NA)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Abondance without NA",
+         Treatment = treatment)
+
+results_freq <- data %>%
+  filter(Treatment == treatment) %>%
+  left_join(rarity_freq %>% select(Species, rarity_freq), by = "Species") %>%
+  filter(rarity_freq %in% c("rare", "common")) %>%
+  group_by(rarity_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_freq)%>%
+  mutate(Spatial_scale = "Global",
+         rarity_type = "Frequence",
+         Treatment = treatment)
+
+rbind(results_with_NA, results_without_NA, results_freq) %>%
+    mutate(Spatial_scale = "Global")
+}
+
+global_rarity_warm <- compute_global_rarity(data, "warm")
+global_rarity_CO   <- compute_global_rarity(data, "Control_origin")
+global_rarity_CD   <- compute_global_rarity(data, "Control_dest")
+
+global_rarity2 <- bind_rows(
+  compute_global_rarity(data, "warm"),
+  compute_global_rarity(data, "Control_origin"),
+  compute_global_rarity(data, "Control_dest")
+)
+
+```
+
+
+##Region
+
+exemple fait a la main
+
+si on prend Agrostis_rupestris dans CH_Calanda:
+*without NA: 39.5/11=3.59--> ca ca sera sum()/length
+*with NA:39.5/20 =1.975 --> mean(na.rm=T)
+
+A<-    mat_species%>%
+  filter(Region=="CH_Calanda")%>%
+  summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE))) %>%
+   pivot_longer(cols= everything(), names_to = "Species",values_to = "total_cover_region_with_NA") %>%
+  filter(total_cover_region_with_NA>0)%>%
+  pivot_wider(names_from = Species, 
+              values_from =total_cover_region_with_NA)
+
+
+```{r}
+mat_wide <- data %>%
+  filter(Treatment == "warm") %>%
+  pivot_wider(id_cols = c("Region", "destPlotID"), names_from = Species, 
+              values_from = Abs_Cover_initial, values_fn = mean)
+
+mat_species <- mat_wide %>% ungroup() %>% select(-destPlotID) #peut etre pas enlever les destplot ici
+
+#warm data-----------
+
+#with NA (na.rm= F) en fait ca marche pas car tout devient NA et toutes les espèces deviennent des intermediaires.
+mean_with_NA<- mat_species%>%
+  group_by(Region)%>%
+ summarise(
+    across(
+      where(is.numeric), #pour toutes les colonnes ou c'est du numériques, donc avec abondance
+      \(x) if (all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE) / length(x) #quand tout est NA, l'espèce n'est pas présente dans la région, donc NA_real_ sinon on fait la somme et on compte les NA quand l'epèce est présente dans la région mais pas dans un des sites. \x c'est la fonction anonyme et bien mettre les parathèses autour
+    )
+  ) %>% pivot_longer(!Region ,names_to = "Species",values_to = "total_cover_region_with_NA")%>%
+     filter(!is.na(total_cover_region_with_NA)) %>% # surotut ca pour drop the species flagged as absent for this region
+  group_by(Region)%>%
+  mutate(
+    q10 = quantile(total_cover_region_with_NA, 0.10),
+    q90 = quantile(total_cover_region_with_NA, 0.90),
+    rarity_region_mean_with_NA = case_when(
+      total_cover_region_with_NA <= q10 ~ "rare",
+      total_cover_region_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, Region, rarity_region_mean_with_NA, total_cover_region_with_NA)
+   
+  # wihtout NA: moyenne sur présences uniquement 
+mean_without_NA<- mat_species %>%
+  group_by(Region)%>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(!Region, names_to = "Species", values_to = "total_cover_region_without_NA")%>%
+  group_by(Region)%>%
+  mutate(
+    q10 = quantile(total_cover_region_without_NA, 0.10, na.rm=T),
+    q90 = quantile(total_cover_region_without_NA, 0.90, na.rm=T),
+    rarity_region_mean_without_NA = case_when(
+      total_cover_region_without_NA <= q10 ~ "rare",
+      total_cover_region_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, Region, rarity_region_mean_without_NA, total_cover_region_without_NA)
+
+rarity_region_abund<- left_join(mean_with_NA, mean_without_NA, by = c("Species", "Region"))
+
+#frequence
+region_cover_warm_freq <- data %>%
+  filter(Treatment == "warm")%>%
+  group_by(Region, Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  group_by(Region) %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_region_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, Region, n_plot_presence, rarity_region_freq)
+
+rarity_region_warm<- left_join(rarity_region_abund, region_cover_warm_freq , by = c("Species", "Region"))
+
+
+#calculate the slope
+results_region_warm_mean_with_NA <- data %>%
+  group_by(Region)%>%
+  filter(Treatment == "warm") %>%
+  left_join(mean_with_NA %>% select(Species, Region, rarity_region_mean_with_NA), by = c("Species", "Region")) %>%
+  filter(rarity_region_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_with_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance with NA",
+         Treatment = "warm")
+
+results_region_warm_mean_without_NA <- data %>%
+  group_by(Region)%>%
+  filter(Treatment == "warm") %>%
+  left_join(mean_without_NA %>% select(Species, Region, rarity_region_mean_without_NA), by = c("Species", "Region")) %>%
+  filter(rarity_region_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_without_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance without NA",
+         Treatment = "warm")
+
+results_region_warm_freq <- data %>%
+  filter(Treatment == "warm") %>%
+  group_by(Region) %>%
+  left_join(region_cover_warm_freq %>% select(Species, Region, rarity_region_freq), by = c("Species", "Region")) %>%
+  filter(rarity_region_freq %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_freq)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Frequence",
+         Treatment = "warm")
+
+region_rarity_warm <- rbind(results_region_warm_mean_without_NA, results_region_warm_mean_with_NA,results_region_warm_freq )
+
+#fonction? --------------
+compute_region_rarity <- function(data, treatment) {
+  mat_wide <- data %>%
+  filter(Treatment == treatment) %>%
+  pivot_wider(id_cols = c("Region", "destPlotID"), names_from = Species, 
+              values_from = Abs_Cover_initial, values_fn = mean)
+
+mat_species <- mat_wide %>% ungroup() %>% select(-destPlotID)
+
+#with NA (na.rm= F) en fait ca marche pas car tout devient NA et toutes les espèces deviennent des intermediaires.
+mean_with_NA<- mat_species%>%
+  group_by(Region)%>%
+ summarise(
+    across(
+      where(is.numeric), #pour toutes les colonnes ou c'est du numériques, donc avec abondance
+      \(x) if (all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE) / length(x) #quand tout est NA, l'espèce n'est pas présente dans la région, donc NA_real_ sinon on fait la somme et on compte les NA quand l'epèce est présente dans la région mais pas dans un des sites. \x c'est la fonction anonyme et bien mettre les parathèses autour
+    )
+  ) %>% pivot_longer(!Region ,names_to = "Species",values_to = "total_cover_region_with_NA")%>%
+     filter(!is.na(total_cover_region_with_NA)) %>% # surotut ca pour drop the species flagged as absent for this region
+  group_by(Region)%>%
+  mutate(
+    q10 = quantile(total_cover_region_with_NA, 0.10),
+    q90 = quantile(total_cover_region_with_NA, 0.90),
+    rarity_region_mean_with_NA = case_when(
+      total_cover_region_with_NA <= q10 ~ "rare",
+      total_cover_region_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, Region, rarity_region_mean_with_NA, total_cover_region_with_NA)
+
+# wihtout NA: moyenne sur présences uniquement 
+mean_without_NA<- mat_species %>%
+  group_by(Region)%>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(!Region, names_to = "Species", values_to = "total_cover_region_without_NA")%>%
+  group_by(Region)%>%
+  mutate(
+    q10 = quantile(total_cover_region_without_NA, 0.10, na.rm=T),
+    q90 = quantile(total_cover_region_without_NA, 0.90, na.rm=T),
+    rarity_region_mean_without_NA = case_when(
+      total_cover_region_without_NA <= q10 ~ "rare",
+      total_cover_region_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, rarity_region_mean_without_NA, total_cover_region_without_NA)
+
+#frequence
+region_freq <- data %>%
+  filter(Treatment == "warm")%>%
+  group_by(Region, Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  group_by(Region) %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_region_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, Region, n_plot_presence, rarity_region_freq)
+
+#calculate the slope
+results_region_mean_with_NA <- data %>%
+  group_by(Region)%>%
+  filter(Treatment == treatment) %>%
+  left_join(mean_with_NA %>% select(Species, Region, rarity_region_mean_with_NA), by = c("Species", "Region")) %>%
+  filter(rarity_region_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_with_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance with NA",
+         Treatment = treatment)
+
+results_region_mean_without_NA <- data %>%
+  group_by(Region)%>%
+  filter(Treatment == treatment) %>%
+  left_join(mean_without_NA %>% select(Species, Region, rarity_region_mean_without_NA), by = c("Species", "Region")) %>%
+  filter(rarity_region_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_without_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance without NA",
+         Treatment = treatment)
+
+results_region_freq <- data %>%
+  filter(Treatment == treatment) %>%
+  group_by(Region) %>%
+  left_join(region_freq %>% select(Species, Region, rarity_region_freq), by = c("Species", "Region")) %>%
+  filter(rarity_region_freq %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_freq)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Frequence",
+         Treatment = treatment)
+
+rbind(results_region_mean_with_NA, results_region_mean_without_NA, results_region_freq) %>%
+    mutate(Spatial_scale = "Region")
+}
+
+region_rarity_warm <- compute_region_rarity(data, "warm")
+region_rarity_CO   <- compute_region_rarity(data, "Control_origin")
+region_rarity_CD   <- compute_region_rarity(data, "Control_dest")
+
+region_rarity <- bind_rows(
+  compute_region_rarity(data, "warm"),
+  compute_region_rarity(data, "Control_origin"),
+  compute_region_rarity(data, "Control_dest")
+)
+
+
+#plot-----------
+
+#plots ------------
+region_rarity %>%
+  ggplot(aes(x=Treatment, y=slope, color= Species))+
+  geom_point(aes(x= Treatment, y= slope))+
+  geom_pointrange(aes(x=Treatment, ymin = CI_low, ymax = CI_high))
+
+region_rarity %>%
+  filter(n_obs>10)%>%
+  ggplot() +
+  geom_point(aes(x = Treatment, y = slope, colour = Region, shape =Species)) +
+  scale_shape_manual(values = c("common" =19, "rare" =8))+
+  scale_color_hue(direction = 1) +
+  theme_minimal() +
+   geom_hline(yintercept = 1, color= "gold", linetype= "dashed", linewidth= 1.6)+
+  geom_hline(yintercept = 2, color= "darkolivegreen2", linetype = "dashed", linewidth =1.6)+
+  facet_wrap(vars(rarity_type))+
+   ggtitle("Rarity at regional scale - n_ob >10")+
+  theme_minimal(base_size = 16)+
+    theme(axis.text.x = element_text(angle = 30))
+
+region_rarity %>%
+  filter(n_obs>10)%>%
+  filter(rarity_type == "Abondance with NA")%>%
+  ggplot() +
+  #geom_jitter(aes(x = Treatment, y = slope, colour = Region, shape =Species)) +
+  geom_boxplot(aes(x=Species, y=slope))+
+  scale_shape_manual(values = c("common" =19, "rare" =8))+
+  scale_color_hue(direction = 1) +
+  theme_minimal() +
+   geom_hline(yintercept = 1, color= "gold", linetype= "dashed", linewidth= 1.6)+
+  geom_hline(yintercept = 2, color= "darkolivegreen2", linetype = "dashed", linewidth =1.6)+
+  facet_wrap(vars(Treatment))+
+   ggtitle("Rarity at regional scale - n_ob >10 - Abondance with NA")+
+  theme_minimal(base_size = 16)+
+    theme(axis.text.x = element_text(angle = 30))
+
+region_rarity %>%
+  filter(n_obs>10)%>%
+  filter(rarity_type == "Abondance without NA")%>%
+  ggplot() +
+  #geom_jitter(aes(x = Treatment, y = slope, colour = Region, shape =Species)) +
+  geom_boxplot(aes(x=Species, y=slope))+
+  scale_shape_manual(values = c("common" =19, "rare" =8))+
+  scale_color_hue(direction = 1) +
+  theme_minimal() +
+   geom_hline(yintercept = 1, color= "gold", linetype= "dashed", linewidth= 1.6)+
+  geom_hline(yintercept = 2, color= "darkolivegreen2", linetype = "dashed", linewidth =1.6)+
+  facet_wrap(vars(Treatment))+
+   ggtitle("Rarity at regional scale - n_ob >10 - Abondance without NA")+
+  theme_minimal(base_size = 16)+
+    theme(axis.text.x = element_text(angle = 30))
+
+region_rarity %>%
+  filter(n_obs>10)%>%
+  filter(rarity_type == "Frequence")%>%
+  ggplot() +
+  #geom_jitter(aes(x = Treatment, y = slope, colour = Region, shape =Species)) +
+  geom_boxplot(aes(x=Species, y=slope))+
+  scale_shape_manual(values = c("common" =19, "rare" =8))+
+  scale_color_hue(direction = 1) +
+  theme_minimal() +
+   geom_hline(yintercept = 1, color= "gold", linetype= "dashed", linewidth= 1.6)+
+  geom_hline(yintercept = 2, color= "darkolivegreen2", linetype = "dashed", linewidth =1.6)+
+  facet_wrap(vars(Treatment))+
+   ggtitle("Rarity at regional scale - n_ob >10 -Frequence")+
+  theme_minimal(base_size = 16)+
+    theme(axis.text.x = element_text(angle = 30))
+
+```
+
+##destSITE 
+
+does not really work....
+
+```{r}
+mat_wide <- data %>%
+  filter(Treatment == "warm") %>%
+  pivot_wider(id_cols = c("Region","destSiteID", "destPlotID"), names_from = Species, 
+              values_from = Abs_Cover_initial, values_fn = mean)
+
+mat_species <- mat_wide %>% ungroup() %>% select(-destPlotID)
+
+#warm data-----------
+
+#with NA (na.rm= F) en fait ca marche pas car tout devient NA et toutes les espèces deviennent des intermediaires.
+mean_with_NA<- mat_species%>%
+  group_by(Region, destSiteID)%>%
+   summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE) / length(x)))%>% #les NA comptent dans le dénominateur 
+   pivot_longer(!c("Region", "destSiteID") ,names_to = "Species",values_to = "total_cover_site_with_NA")%>%
+  group_by(Region, destSiteID)%>%
+  mutate(
+    q10 = quantile(total_cover_site_with_NA, 0.10),
+    q90 = quantile(total_cover_site_with_NA, 0.90),
+    rarity_site_mean_with_NA = case_when(
+      total_cover_site_with_NA <= q10 ~ "rare",
+      total_cover_site_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, Region, destSiteID, rarity_site_mean_with_NA, total_cover_site_with_NA)
+
+# wihtout NA: moyenne sur présences uniquement 
+mean_without_NA<- mat_species %>%
+  group_by(Region, destSiteID)%>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(!c("Region", "destSiteID"), names_to = "Species", values_to = "total_cover_site_without_NA")%>%
+  group_by(Region, destSiteID)%>%
+  mutate(
+    q10 = quantile(total_cover_site_without_NA, 0.10, na.rm=T),
+    q90 = quantile(total_cover_site_without_NA, 0.90, na.rm=T),
+    rarity_site_mean_without_NA = case_when(
+      total_cover_site_without_NA <= q10 ~ "rare",
+      total_cover_site_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, Region, destSiteID, rarity_site_mean_without_NA, total_cover_site_without_NA)
+
+rarity_site_abund<- left_join(mean_with_NA, mean_without_NA, by = c("Species", "Region", "destSiteID"))
+
+#frequence
+site_cover_warm_freq <- data %>%
+  filter(Treatment == "warm")%>%
+  group_by(Region, destSiteID, Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  group_by(Region,destSiteID) %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_site_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, Region,destSiteID,  n_plot_presence, rarity_site_freq)
+
+rarity_site_warm<- left_join(rarity_site_abund, site_cover_warm_freq , by = c("Species", "Region", "destSiteID"))
+
+
+#calculate the slope
+results_region_warm_mean_with_NA <- data %>%
+  group_by(Region, destSiteID)%>%
+  filter(Treatment == "warm") %>%
+  left_join(mean_with_NA %>% select(Species, Region, destSiteID, rarity_region_mean_with_NA), by = c("Species", "Region", "destSiteID")) %>%
+  filter(rarity_region_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(Region, destSiteID, rarity_region_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_with_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance with NA",
+         Treatment = "warm")
+
+results_region_warm_mean_without_NA <- data %>%
+  group_by(Region)%>%
+  filter(Treatment == "warm") %>%
+  left_join(mean_without_NA %>% select(Species, Region, rarity_region_mean_without_NA), by = c("Species", "Region")) %>%
+  filter(rarity_region_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_without_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance without NA",
+         Treatment = "warm")
+
+results_region_warm_freq <- data %>%
+  filter(Treatment == "warm") %>%
+  group_by(Region) %>%
+  left_join(region_cover_warm_freq %>% select(Species, Region, rarity_region_freq), by = c("Species", "Region")) %>%
+  filter(rarity_region_freq %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_freq)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Frequence",
+         Treatment = "warm")
+
+region_rarity_warm <- rbind(results_region_warm_mean_without_NA, results_region_warm_mean_with_NA,results_region_warm_freq )
+
+#fonction? --------------
+compute_region_rarity <- function(data, treatment) {
+  mat_wide <- data %>%
+  filter(Treatment == treatment) %>%
+  pivot_wider(id_cols = c("Region", "destPlotID"), names_from = Species, 
+              values_from = Abs_Cover_initial, values_fn = mean)
+
+mat_species <- mat_wide %>% ungroup() %>% select(-destPlotID)
+
+#with NA (na.rm= F) en fait ca marche pas car tout devient NA et toutes les espèces deviennent des intermediaires.
+mean_with_NA<- mat_species%>%
+  group_by(Region)%>%
+   summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE) / length(x)))%>% #les NA comptent dans le dénominateur 
+   pivot_longer(!Region ,names_to = "Species",values_to = "total_cover_region_with_NA")%>%
+  group_by(Region)%>%
+  mutate(
+    q10 = quantile(total_cover_region_with_NA, 0.10),
+    q90 = quantile(total_cover_region_with_NA, 0.90),
+    rarity_region_mean_with_NA = case_when(
+      total_cover_region_with_NA <= q10 ~ "rare",
+      total_cover_region_with_NA >= q90 ~ "common",
+      TRUE ~ "intermediate")) %>% 
+  select(Species, rarity_region_mean_with_NA, total_cover_region_with_NA)
+
+# wihtout NA: moyenne sur présences uniquement 
+mean_without_NA<- mat_species %>%
+  group_by(Region)%>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))%>%
+  pivot_longer(!Region, names_to = "Species", values_to = "total_cover_region_without_NA")%>%
+  group_by(Region)%>%
+  mutate(
+    q10 = quantile(total_cover_region_without_NA, 0.10, na.rm=T),
+    q90 = quantile(total_cover_region_without_NA, 0.90, na.rm=T),
+    rarity_region_mean_without_NA = case_when(
+      total_cover_region_without_NA <= q10 ~ "rare",
+      total_cover_region_without_NA >= q90 ~ "common",
+      TRUE ~ "intermediate" ) ) %>%
+  select(Species, rarity_region_mean_without_NA, total_cover_region_without_NA)
+
+#frequence
+region_freq <- data %>%
+  filter(Treatment == "warm")%>%
+  group_by(Region, Species) %>%
+  summarise(n_plot_presence = n_distinct(destPlotID), .groups = "drop") %>%
+  group_by(Region) %>%
+  mutate(
+    q10 = quantile(n_plot_presence, 0.10),
+    q90 = quantile(n_plot_presence, 0.90),
+    rarity_region_freq = case_when(
+      n_plot_presence<= q10 ~ "rare",
+      n_plot_presence>= q90 ~ "common",
+      TRUE ~ "intermediate"
+    )
+  ) %>%
+  select(Species, Region, n_plot_presence, rarity_region_freq)
+
+#calculate the slope
+results_region_mean_with_NA <- data %>%
+  group_by(Region)%>%
+  filter(Treatment == treatment) %>%
+  left_join(mean_with_NA %>% select(Species, Region, rarity_region_mean_with_NA), by = c("Species", "Region")) %>%
+  filter(rarity_region_mean_with_NA %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_mean_with_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_with_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance with NA",
+         Treatment = treatment)
+
+results_region_mean_without_NA <- data %>%
+  group_by(Region)%>%
+  filter(Treatment == treatment) %>%
+  left_join(mean_without_NA %>% select(Species, Region, rarity_region_mean_without_NA), by = c("Species", "Region")) %>%
+  filter(rarity_region_mean_without_NA %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_mean_without_NA) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_mean_without_NA)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Abondance without NA",
+         Treatment = treatment)
+
+results_region_freq <- data %>%
+  filter(Treatment == treatment) %>%
+  group_by(Region) %>%
+  left_join(region_freq %>% select(Species, Region, rarity_region_freq), by = c("Species", "Region")) %>%
+  filter(rarity_region_freq %in% c("rare", "common")) %>%
+  group_by(Region, rarity_region_freq) %>%
+  group_modify(~ fit_slope(.x)) %>%
+  rename(Species= rarity_region_freq)%>%
+  mutate(Spatial_scale = "Region",
+         rarity_type = "Frequence",
+         Treatment = treatment)
+
+rbind(results_region_mean_with_NA, results_region_mean_without_NA, results_region_freq) %>%
+    mutate(Spatial_scale = "Region")
+}
+
+region_rarity_warm <- compute_region_rarity(data, "warm")
+region_rarity_CO   <- compute_region_rarity(data, "Control_origin")
+region_rarity_CD   <- compute_region_rarity(data, "Control_dest")
+
+region_rarity <- bind_rows(
+  compute_region_rarity(data, "warm"),
+  compute_region_rarity(data, "Control_origin"),
+  compute_region_rarity(data, "Control_dest")
+)
+
+
+#plot-----------
+
+#plots ------------
+region_rarity %>%
+  ggplot(aes(x=Treatment, y=slope, color= Species))+
+  geom_point(aes(x= Treatment, y= slope))+
+  geom_pointrange(aes(x=Treatment, ymin = CI_low, ymax = CI_high))
+
+region_rarity %>%
+  filter(n_obs >15)%>%
+  filter(slope <3 & slope > 0)%>%
+  ggplot() +
+  geom_point(aes(x = Treatment, y = slope, colour = Region, shape =Species)) +
+  scale_shape_manual(values = c("common" =19, "rare" =8))+
+  scale_color_hue(direction = 1) +
+  theme_minimal() +
+   geom_hline(yintercept = 1, color= "gold", linetype= "dashed", linewidth= 1.6)+
+  geom_hline(yintercept = 2, color= "darkolivegreen2", linetype = "dashed", linewidth =1.6)+
+  facet_wrap(vars(rarity_type))+
+   ggtitle("Rarity at regional scale")+
+  theme_minimal(base_size = 16)+
+    theme(axis.text.x = element_text(angle = 30))
+```
+
+
+
+```{r}
+
+all_scales <- bind_rows(
+  results_global  %>% rename(rarity = rarity_global),
+  results_country %>% rename(rarity = rarity_country),
+  results_Region  %>% rename(rarity = rarity_Region)  %>%
+  mutate(Country = sub("_.*", "", Region)),
+  results_destSiteID    %>% rename(rarity = rarity_destSiteID)  %>%
+  mutate(Country = sub("_.*", "", Region))
+)
+
+# Quick summary
+all_scales %>%
+  group_by(scale, rarity) %>%
+  summarise(mean_slope = mean(slope, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = rarity, values_from = mean_slope)
+```
+
+
+
+#Synchrony
+
+```{r}
+site_species_abs_abund <- read.csv("./intermediate data/site_species_abs_abund.csv")
+
+#ABSOLUTE abundance per treatement
+site_species_warm <- site_species_abs_abund %>%
+  filter(Treatment =="Warm")
+
+site_species_CO <- site_species_abs_abund %>%
+  filter(Treatment =="Control_Origin")
+
+site_species_CD <- site_species_abs_abund%>%
+  filter(Treatment =="Control_Destination")
+
+#aggregate per abondances per year per species for each region
+site_species_warm <- site_species_warm%>%
+  select(-originSiteID, -destPlotID, -destSiteID, -Treatment)%>%
+  group_by(Region, Year)%>%
+  pivot_longer(cols = !c("Region", "Year"), names_to = "Species", values_to = "Abondance")%>%
+  group_by(Region, Year, Species)%>%
+  summarise(sum= sum(Abondance))%>%
+  pivot_wider(names_from = "Species", values_from = "sum")
+
+#For CH_Calanda
+CH_Calanda_data <- site_species_warm%>% 
+  filter(Region == "CH_Calanda")
+
+#numerator: variance de la somme des abondances temporelles
+
+sum <- CH_Calanda_data %>%
+  select(-Region)%>%
+   select(where(~is.numeric(.) && sum(., na.rm = TRUE) != 0))%>%
+  pivot_longer(cols=!c("Year", "Region"), names_to = "Species", values_to = "Abondance")%>%
+  group_by(Year) %>%
+  summarise(total= sum(Abondance, na.rm=T))
+
+numerator <- var(sum$total)  
+
+#denominator: somme des écart-types 
+data1_long <- CH_Calanda_data %>%
+  select(where(~is.numeric(.) && sum(., na.rm = TRUE) != 0))%>%
+    pivot_longer(cols=!c("Year", "Region"), names_to = "Species", values_to = "Abondance")
+  
+sd_species_data <- data1_long %>%
+  group_by(Species)%>%
+  summarise(sd_species = sd(Abondance))
+
+sd_species <- sum(sd_species_data$sd_species, na.rm = T)
+denominator <- sd_species^2
+
+# ratio
+synchrony <- (numerator/denominator)
+synchrony 
+
+library(synchrony)
+
+synchrony_CH_Calanda_warm <-site_species_warm %>%
+  filter(Region=="CH_Calanda")%>%
+  ungroup() %>%
+  select(where(~is.numeric(.) && sum(., na.rm = TRUE) != 0))%>%
+  select(-Year)%>%
+  synchrony::community.sync(nrands = 999) #number of random permutations to build the null distribuion for the significance test
+
+synchrony_CH_Calanda_warm$obs
+
+#now synchorny for all regions and treatemnt
+region <- unique(site_species_warm$Region)
+
+results_synchrony_warm <- data.frame(
+  Region =unique(site_species_warm$Region), 
+  Synchrony = NA_real_,
+  p_value = NA_real_,
+  Treatment = "Warm"
+)
+
+for (i in seq_along(region)) {
+  results <- site_species_warm %>%
+    filter(Region== region[i])%>%
+    ungroup()%>%
+     select(where(~is.numeric(.) && sum(., na.rm = TRUE) != 0))%>%
+  select(-Year)%>%
+  synchrony::community.sync(nrands = 999)
+  
+  
+  results_synchrony_warm$Synchrony[i] <- results$obs
+  results_synchrony_warm$p_value[i] <- results$pval
+  
+}
+
+#other treatments
+#control O
+results_synchrony_controlO <- data.frame(
+  Region =unique(site_species_CO$Region), 
+  Synchrony = NA_real_,
+  p_value = NA_real_,
+  Treatment = "Control Origin"
+)
+
+for (i in seq_along(region)) {
+  results <- site_species_CO %>%
+    filter(Region== region[i])%>%
+    ungroup()%>%
+     select(where(~is.numeric(.) && sum(., na.rm = TRUE) != 0))%>%
+  select(-Year)%>%
+  synchrony::community.sync(nrands = 999)
+  
+  
+  results_synchrony_controlO$Synchrony[i] <- results$obs
+   results_synchrony_controlO$p_value[i] <- results$pval
+  
+}
+
+#control_dest
+results_synchrony_control_D <- data.frame(
+  Region =unique(site_species_CD$Region), 
+  Synchrony = NA_real_,
+  p_value = NA_real_,
+  Treatment = "Control Destination"
+)
+
+for (i in seq_along(region)) {
+  results <- site_species_CD %>%
+    filter(Region== region[i])%>%
+    ungroup()%>%
+     select(where(~is.numeric(.) && sum(., na.rm = TRUE) != 0))%>%
+  select(-Year)%>%
+  synchrony::community.sync(nrands = 999)
+  
+  
+  results_synchrony_control_D$Synchrony[i] <- results$obs
+  results_synchrony_control_D$p_value[i] <- results$pval
+  
+}
+
+results_synchrony <- rbind(results_synchrony_warm, results_synchrony_controlO, results_synchrony_control_D)
+
+
+ggplot(results_synchrony) +
+  aes(x = Treatment, y = Synchrony, colour = Region) +
+  geom_point() +
+  scale_color_hue(direction = 1) +
+  theme_minimal(base_size = 15)
+
+results_synchrony$Treatment <- factor(
+  results_synchrony$Treatment, 
+  levels = c("Control Origin", "Control Destination", "Warm"))
+
+ggplot(results_synchrony) +
+  aes(x = Treatment, y = Synchrony, color = Treatment) +
+  geom_boxplot() +
+   scale_color_manual(
+    values = c(
+      "Warm"           = "firebrick1",
+      "Control Origin" = "dodgerblue",
+      "Control Destination"   = "orange"
+    )
+  ) +
+  theme_minimal(base_size = 15)
+
+
+results_synchrony%>%
+  group_by(Treatment)%>%
+  summarise(mean = mean(Synchrony))
+
+# add variable elevation and plotSize
+
+metadata <- read.csv("./intermediate data/metadata.csv")%>%
+  group_by(Region)%>%
+  summarise(mean_plot = mean(PlotSize),
+            mean_year_range = mean(YearRange))
+
+results_synchrony<-results_synchrony %>% left_join(metadata, by = "Region") 
+
+m<- lm(Synchrony ~Treatment, data= results_synchrony)
+summary(m)
+moy<- emmeans(m, ~ Treatment )
+plot(moy)
+```
+
+
+
+
+
+#END
+

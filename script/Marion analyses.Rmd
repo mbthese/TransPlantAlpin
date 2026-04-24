@@ -6,6 +6,8 @@ editor_options:
   chunk_output_type: console
 ---
 
+https://ourcodingclub.github.io/tutorials/mixed-models/
+
 #Library
 ```{r}
 library(tidyverse)   
@@ -745,12 +747,13 @@ metadata <- read.csv("./intermediate data/metadata.csv")
 
 data_cover <- data_cover%>%
     left_join(metadata %>% dplyr::select(Region, destSiteID, YearEstablished, YearMin), by = c("Region","destSiteID"))
-
-##Billur does also this, but I am not sure, il n'y a jamais de Year_0 negatif and I do not understand how Year=0 is a pre-transplantation survey: 
-#%>%
- # mutate(Year_0 = Year-YearEstablished)%>%
+  
+  ##Billur does also this, but I am not sure, il n'y a jamais de Year_0 negatif and I do not understand how Year=0 is a pre-transplantation survey: 
+# %>%
+#    mutate(Year_0 = Year-YearEstablished)%>%
 #  filter(Year_0 != 0)%>% # We do not take pre-transplantation vegetation surveys
- # dplyr::select(-(YearEstablished:Year_0))
+#   dplyr::select(-(YearEstablished:Year_0))
+
 
 
 ```
@@ -857,21 +860,21 @@ site_species_CD <- read.csv("./intermediate data/site_species_rel_abund.csv", se
 ###get matrix for initial year of survey per Plot ID
 site_species_warm_initial <- site_species_warm %>%
  group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
-  filter((max(Year) - min(Year)) >= 3) %>% #mais normalement on a déja fait ce filtre plus haut
+#  filter((max(Year) - min(Year)) >= 3) %>% #mais normalement on a déja fait ce filtre plus haut
   filter(Year == min(Year)) %>%
   ungroup() %>%
   rename(Year_initial = Year)
 
 site_species_CO_initial <- site_species_CO %>%
  group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
-  filter((max(Year) - min(Year)) >= 3) %>% 
+ # filter((max(Year) - min(Year)) >= 3) %>% 
   filter(Year == min(Year)) %>%
   ungroup() %>%
   rename(Year_initial = Year)
 
 site_species_CD_initial <- site_species_CD %>%
   group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
-  filter((max(Year) - min(Year)) >= 3) %>% 
+#  filter((max(Year) - min(Year)) >= 3) %>% 
   filter(Year == min(Year)) %>%
   ungroup() %>%
   rename(Year_initial = Year)
@@ -879,21 +882,21 @@ site_species_CD_initial <- site_species_CD %>%
 ###get matrix for last year of survey per plot ID
 site_species_warm_final <- site_species_warm %>%
   group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
-  filter((max(Year) - min(Year)) >= 3) %>%
+ # filter((max(Year) - min(Year)) >= 3) %>%
   filter(Year == max(Year)) %>%
   ungroup() %>%
   rename(Year_final = Year)
 
 site_species_CO_final <- site_species_CO %>%
   group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
-  filter((max(Year) - min(Year)) >= 3) %>%
+ # filter((max(Year) - min(Year)) >= 3) %>%
   filter(Year == max(Year)) %>%
   ungroup() %>%
   rename(Year_final = Year)
 
 site_species_CD_final <- site_species_CD %>%
   group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
-  filter((max(Year) - min(Year)) >= 3) %>%
+ # filter((max(Year) - min(Year)) >= 3) %>%
   filter(Year == max(Year)) %>%
   ungroup() %>%
   rename(Year_final = Year)
@@ -981,738 +984,152 @@ write.csv(site_species_CO_end_clean, "./intermediate data/site_species_CO_end_cl
 write.csv(site_species_CD_end_clean, "./intermediate data/site_species_CD_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
 ```
 
-#Chisholm analysis - simple
+#Final - initial Absolute abundance
+
 ```{r}
-warm_data <- read.csv(file = "./intermediate data/site_species_warm_end_clean_rel_abund_cover_initial_final.csv") %>%
-  mutate(delta2_Rel_Cover = (Rel_Cover_final - Rel_Cover_initial)^2)
+site_species_abs_abund <- read.csv("./intermediate data/site_species_abs_abund.csv")
 
-control_origin_data <- read.csv(file = "./intermediate data/site_species_CO_end_clean_rel_abund_cover_initial_final.csv")  %>%
-  mutate(delta2_Rel_Cover = (Rel_Cover_final - Rel_Cover_initial)^2)
+#ABSOLUTE abundance per treatement
+site_species_warm <- site_species_abs_abund %>%
+  filter(Treatment =="Warm")
 
-control_dest_data <- read.csv(file = "./intermediate data/site_species_CD_end_clean_rel_abund_cover_initial_final.csv")  %>%
-  mutate(delta2_Rel_Cover = (Rel_Cover_final - Rel_Cover_initial)^2)
-  
+site_species_CO <- site_species_abs_abund %>%
+  filter(Treatment =="Control_Origin")
 
+site_species_CD <- site_species_abs_abund%>%
+  filter(Treatment =="Control_Destination")
 
-################ MODEL ###############################################
+#Delta Cover for each treatement 
+###get matrix for initial year of survey per Plot ID
+site_species_warm_initial <- site_species_warm %>%
+ group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
+  filter(Year == min(Year)) %>%
+  ungroup() %>%
+  rename(Year_initial = Year)
 
-#CONTROL ORIGIN
+site_species_CO_initial <- site_species_CO %>%
+ group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
+  filter(Year == min(Year)) %>%
+  ungroup() %>%
+  rename(Year_initial = Year)
 
-table(log(control_origin_data$delta2_Rel_Cover) %>%is.na())
-table(log(control_origin_data$Rel_Cover_initial)%>%is.na())
+site_species_CD_initial <- site_species_CD %>%
+  group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
+  filter(Year == min(Year)) %>%
+  ungroup() %>%
+  rename(Year_initial = Year)
 
-summary(log(control_origin_data$delta2_Rel_Cover)) #I will then filter out non finite values (il y a en que 3, au lieu de mettre un petit epsilon qui pourrait modifier la pente?)
+###get matrix for last year of survey per plot ID
+site_species_warm_final <- site_species_warm %>%
+  group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
+  filter(Year == max(Year)) %>%
+  ungroup() %>%
+  rename(Year_final = Year)
 
-model_control_origin <- lm(log(delta2_Rel_Cover) ~ log(Rel_Cover_initial), data= control_origin_data %>% filter(delta2_Rel_Cover > 0) )
-summary(model_control_origin)
+site_species_CO_final <- site_species_CO %>%
+  group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
+  filter(Year == max(Year)) %>%
+  ungroup() %>%
+  rename(Year_final = Year)
 
-#CONTROL DESTINATION
+site_species_CD_final <- site_species_CD %>%
+  group_by(Region, originSiteID, destSiteID, destPlotID) %>% 
+  filter(Year == max(Year)) %>%
+  ungroup() %>%
+  rename(Year_final = Year)
 
-table(log(control_dest_data$delta2_Rel_Cover) %>%is.na())
-table(log(control_dest_data$Rel_Cover_initial)%>%is.na())
-summary(log(control_dest_data$delta2_Rel_Cover))
-model_control_dest <- lm(log(delta2_Rel_Cover) ~ log(Rel_Cover_initial), data= control_dest_data %>% filter(delta2_Rel_Cover > 0))
-summary(model_control_dest)
-
+# Convert from wide to long format for initial and final datasets
 #WARM
+site_species_warm_initial_long <- site_species_warm_initial %>%
+  pivot_longer(cols = 7:ncol(.),
+               names_to = "Species",
+               values_to = "Abs_Cover_initial") %>%
+  distinct(Region, originSiteID, destSiteID, destPlotID, Species, Treatment, Abs_Cover_initial, .keep_all = TRUE) %>%
+  mutate(across(c(Region, originSiteID, destSiteID, destPlotID, Species, Treatment), as.character))
 
-table(log(warm_data$delta2_Rel_Cover) %>%is.na())
-table(log(warm_data$Rel_Cover_initial)%>%is.na())
-summary(log(warm_data$delta2_Rel_Cover))
-model_warm <- lm(log(delta2_Rel_Cover) ~ log(Rel_Cover_initial), data= warm_data %>% filter(delta2_Rel_Cover > 0))
-summary(model_warm)
+site_species_warm_final_long <- site_species_warm_final %>%
+  pivot_longer(cols = 7:ncol(.),
+               names_to = "Species",
+               values_to = "Abs_Cover_final") %>%
+  distinct(Region, originSiteID, destSiteID, destPlotID, Species, Treatment, Abs_Cover_final, .keep_all = TRUE) %>%
+  mutate(across(c(Region, originSiteID, destSiteID, destPlotID, Species, Treatment), as.character))
 
+#Control origin
+site_species_CO_initial_long <- site_species_CO_initial %>%
+  pivot_longer(cols = 7:ncol(.),
+               names_to = "Species",
+               values_to = "Abs_Cover_initial") %>%
+  distinct(Region, originSiteID, destSiteID, destPlotID, Species, Treatment, Abs_Cover_initial, .keep_all = TRUE) %>%
+  mutate(across(c(Region, originSiteID, destSiteID, destPlotID, Species, Treatment), as.character))
 
-############### rare and common on control_origin ############### 
-df_rare_common <- control_origin_data %>%
-  mutate(abundance_class = case_when(
-    Rel_Cover_initial < quantile(Rel_Cover_initial, 0.10) ~ "Rare",
-    Rel_Cover_initial > quantile(Rel_Cover_initial, 0.90) ~ "Common",
-    TRUE ~ "Intermediate"
-  ))
+site_species_CO_final_long <- site_species_CO_final %>%
+  pivot_longer(cols = 7:ncol(.),
+               names_to = "Species",
+               values_to = "Abs_Cover_final") %>%
+  distinct(Region, originSiteID, destSiteID, destPlotID, Species, Treatment, Abs_Cover_final, .keep_all = TRUE) %>%
+  mutate(across(c(Region, originSiteID, destSiteID, destPlotID, Species, Treatment), as.character))
 
-df_rare_common <- df_rare_common %>%
-  mutate(logN = log(Rel_Cover_initial),
-         logDelta2 = log(delta2_Rel_Cover))
+#Control destination
+site_species_CD_initial_long <- site_species_CD_initial %>%
+  pivot_longer(cols = 7:ncol(.),
+               names_to = "Species",
+               values_to = "Abs_Cover_initial") %>%
+  distinct(Region, originSiteID, destSiteID, destPlotID, Species, Treatment, Abs_Cover_initial, .keep_all = TRUE) %>%
+  mutate(across(c(Region, originSiteID, destSiteID, destPlotID, Species, Treatment), as.character))
 
+site_species_CD_final_long <- site_species_CD_final %>%
+  pivot_longer(cols = 7:ncol(.),
+               names_to = "Species",
+               values_to = "Abs_Cover_final") %>%
+  distinct(Region, originSiteID, destSiteID, destPlotID, Species, Treatment, Abs_Cover_final, .keep_all = TRUE) %>%
+  mutate(across(c(Region, originSiteID, destSiteID, destPlotID, Species, Treatment), as.character))
 
-ggplot(df_rare_common, aes(x = logN, y = logDelta2)) +
-  geom_point(aes(color = abundance_class), alpha = 0.5, size = 2) +
-  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 1) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray50") +
-  geom_abline(intercept = 0, slope = 2, linetype = "dotted", color = "purple", linewidth = 1.5) +
-  theme_minimal(base_size = 14) 
+# Merge initial and final datasets
+site_species_warm_end <- site_species_warm_initial_long %>%
+  left_join(site_species_warm_final_long %>% 
+              dplyr::select(Region, originSiteID, destSiteID, 
+                    destPlotID, Species, Treatment,
+                    Year_final, Abs_Cover_final),
+    by = c("Region", "originSiteID", "destSiteID", 
+           "destPlotID", "Species", "Treatment")
+  )
 
-# common and rare control origin
-model_control_origin_rare <- lm(logDelta2 ~ logN, data =   df_rare_common %>% filter(abundance_class =="Rare"))
-model_control_origin_common<- lm(logDelta2 ~ logN, data =   df_rare_common %>% filter(abundance_class =="Common"))  
+site_species_CO_end <- site_species_CO_initial_long %>%
+  left_join(site_species_CO_final_long %>% 
+               dplyr::select(Region, originSiteID, destSiteID, 
+                    destPlotID, Species, Treatment,
+                    Year_final, Abs_Cover_final),
+    by = c("Region", "originSiteID", "destSiteID", 
+           "destPlotID", "Species", "Treatment")
+  )
 
-summary(model_control_origin_rare) 
-summary(model_control_origin_common)
+site_species_CD_end <- site_species_CD_initial_long %>%
+  left_join(site_species_CD_final_long %>% 
+               dplyr::select(Region, originSiteID, destSiteID, 
+                    destPlotID, Species, Treatment,
+                    Year_final, Abs_Cover_final),
+    by = c("Region", "originSiteID", "destSiteID", 
+           "destPlotID", "Species", "Treatment")
+  )
 
+# Remove 0/0 cases (species absent both times)
+#remove immigration as in Chishom
+site_species_warm_end_clean <- site_species_warm_end %>%
+  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
+  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) #remove immigration
 
-############### rare and common on DESTINATION_origin ############### 
-df_rare_common_dest <- control_dest_data %>%
-  mutate(abundance_class = case_when(
-    Rel_Cover_initial < quantile(Rel_Cover_initial, 0.10) ~ "Rare",
-    Rel_Cover_initial > quantile(Rel_Cover_initial, 0.90) ~ "Common",
-    TRUE ~ "Intermediate"
-  ))
+site_species_CO_end_clean <- site_species_CO_end %>%
+  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
+   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) 
 
-df_rare_common_dest <- df_rare_common_dest %>%
-  mutate(logN = log(Rel_Cover_initial),
-         logDelta2 = log(delta2_Rel_Cover))
+site_species_CD_end_clean <- site_species_CD_end %>%
+  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
+  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) 
 
-
-model_control_dest_rare <- lm(logDelta2 ~ logN, data =   df_rare_common_dest %>% filter(abundance_class =="Rare"))
-model_control_dest_common<- lm(logDelta2 ~ logN, data =   df_rare_common_dest %>% filter(abundance_class =="Common"))  
-
-summary(model_control_dest_rare) 
-summary(model_control_dest_common)
-
-############### rare and common on WARM ############### 
-df_warm_rare_common <- warm_data %>%
-  mutate(abundance_class = case_when(
-    Rel_Cover_initial < quantile(Rel_Cover_initial, 0.10) ~ "Rare",
-    Rel_Cover_initial > quantile(Rel_Cover_initial, 0.90) ~ "Common",
-    TRUE ~ "Intermediate"
-  ))
-
-df_warm_rare_common  <- df_warm_rare_common %>%
-  mutate(logN = log(Rel_Cover_initial),
-         logDelta2 = log(delta2_Rel_Cover))
-
-# common and rare control origin
-model_warm_origin_rare <- lm(logDelta2 ~ logN, data =   df_warm_rare_common  %>% filter(abundance_class =="Rare"))
-model_warm_origin_common<- lm(logDelta2 ~ logN, data =   df_warm_rare_common  %>% filter(abundance_class =="Common"))  
-
-summary(model_warm_origin_rare) 
-summary(model_warm_origin_common)
-
+#save outputs
+write.csv(site_species_warm_end_clean, "./intermediate data/site_species_warm_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
+write.csv(site_species_CO_end_clean, "./intermediate data/site_species_CO_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
+write.csv(site_species_CD_end_clean, "./intermediate data/site_species_CD_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
 ```
 
-#Chisholm analysis - more complicated
-##Adding variables - delta_year, plot size, elevation
-
-We are not interested in their impact on delta2_rel_cover but they can influence the patterns --> rput them as radom effect
-
-```{r}
-
-#add variable nbr of years between initial survey and last survey
-
-warm_data <- read.csv(file = "./intermediate data/site_species_warm_end_clean_rel_abund_cover_initial_final.csv") %>%
-  mutate(delta2_Rel_Cover = (Rel_Cover_final - Rel_Cover_initial)^2,
-          delta_years = Year_final -Year_initial) %>%
-  relocate(delta_years, .after= Year_final)  %>%
-  mutate(logN = log(Rel_Cover_initial),
-         logDelta2 = log(delta2_Rel_Cover))
-
-control_origin_data <- read.csv(file = "./intermediate data/site_species_CO_end_clean_rel_abund_cover_initial_final.csv")  %>%
-  mutate(delta2_Rel_Cover = (Rel_Cover_final - Rel_Cover_initial)^2,
-          delta_years = Year_final -Year_initial) %>%
-  relocate(delta_years, .after= Year_final)  %>%
-  mutate(logN = log(Rel_Cover_initial),
-         logDelta2 = log(delta2_Rel_Cover))
-
-
-control_dest_data <- read.csv(file = "./intermediate data/site_species_CD_end_clean_rel_abund_cover_initial_final.csv")  %>%
-  mutate(delta2_Rel_Cover = (Rel_Cover_final - Rel_Cover_initial)^2,
-          delta_years = Year_final -Year_initial) %>%
-  relocate(delta_years, .after= Year_final)  %>%
-  mutate(logN = log(Rel_Cover_initial),
-         logDelta2 = log(delta2_Rel_Cover))
-
-# add variable elevation and plotSize
-
-metadata <- read.csv("./intermediate data/metadata.csv")
-
-warm_data <-warm_data %>% left_join(metadata %>% select(Region, destSiteID, Elevation, PlotSize)) %>%
-  relocate(PlotSize, .after= destPlotID)
-
-warm_data <-warm_data %>% relocate(Elevation, .after= destPlotID)
-
-control_origin_data <-control_origin_data %>% left_join(metadata %>% select(Region, destSiteID, Elevation, PlotSize)) %>%
-  relocate(PlotSize, .after= destPlotID)
-
-control_origin_data <-control_origin_data %>% relocate(Elevation, .after= destPlotID)
-
-control_dest_data <-control_dest_data %>% left_join(metadata %>% select(Region, destSiteID, Elevation, PlotSize)) %>%
-  relocate(PlotSize, .after= destPlotID)
-
-control_dest_data <-control_dest_data %>% relocate(Elevation, .after= destPlotID)
-
-
-```
-
-##distributions
-```{r}
-hist(warm_data$logDelta2) # seems close to a normal distribution
-hist(control_origin_data$logDelta2)
-hist(control_dest_data$logDelta2)
-```
-
-
-##new models
-
-Je veux une pente qui varie par site et diffère entre rare et commune, et prendre en compte (les effets dus à l'elevation, plotsize, delta_years)
-
-Elevation = 29 
-
-PlotSize = 6 #is it coherent to report variance for 6 levels? --> info in plotID
-
-delta_years = 6 #is it coherent to report variance for 6 levels? -->info in Region
-
-je ne veux pas estimer leur effet, juste contrôler leur influence.
-
-Q: si on calcule rare et commune par region, sachant que par region il y a plusieurs sites, et dans chque site il y a plusieurs plot (les plot c'est un peu comme une replication). elevation c'est l'elevation du destPlotID donc est-ce que l'info serait deja prise en compte dans destPlotID? de même plotSize?
-
-*https://dynamicecology.wordpress.com/2015/11/04/is-it-a-fixed-or-random-effect/*
-A) Can I talk you out of including it? (solved – drop it from the model)
-A) No I can’t talk you out of it? too bad. Go to B
-B) Is it a continuous variable or has only a few levels (e.g. 2-4) → has to be fixed
-B) OK, a choice is possible – go to C.
-C) Do you want estimates of s1, s2,…,sn (perhaps because you have lots of data and so lots degrees of freedom to burn and are curious how sites differ)? →Fixed
-C) Do you want estimates of σ2, perhaps because it saves you degrees of freedom you really need or perhaps because the variance is more interesting (or useful for variance partitioning) than a bunch of estimates of site effects nobody will ever look at? go to D
-D) can you either keep the design really simple or are willing to give up p-values→Random
-D) You’re kind of out of luck. Change one of your answers and try again
-
-
-###Control Origin
-```{r}
-
-#CONTROL ORIGIN
-df_rare_common <- control_origin_data %>%
-  group_by(Region) %>% #calcul des abondances rare vs communes au niveau de la region
-  mutate(abundance_class = case_when(
-    Rel_Cover_initial <= quantile(Rel_Cover_initial, 0.10) ~ "Rare", #gamme comparable de tailles d’échantillon par classe
-    Rel_Cover_initial >= quantile(Rel_Cover_initial, 0.90) ~ "Common",
-    TRUE ~ "Intermediate"
-  ))
-
-idee1 <- lmer(logDelta2 ~ logN+
-                (1|Region/destSiteID/destPlotID) + #prend en compte variance ente region, enter site par region et ente plot par site
-                (1|PlotSize) +
-                (1|Elevation) +
-                (1|delta_years)+
-                (1|Species), 
-                             data= df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-
-summary(idee1)
-
-##########################################################################
-#From the tree:
-# - I can talk you out of PlotSize + delta_years
-# - Elevation, categorical (n=29) , I don't want estimates of the different elevation
-# -destPlotID, categorical (n=197), I don't want estimates of the different plots
-# -Species, categorical (n=443), I don't want estimates of the different plots
-
-  
-#2 pentes différentes 
-idee2 <- lmer(
-   logDelta2 ~ 
-    logN * abundance_class +  # effet fixe global (avec differences de pentes entre Rare/Intermediate/Common)
-     (1|destPlotID) +   
-     (1|Elevation)+ 
-     (1| Species),                 
-  data = df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-summary(idee2)
-
-plot(idee2)
-qqnorm(resid(idee2))
-qqline(resid(idee2))
-
-### plot
-(mm_plot <- ggplot(df_rare_common, aes(x = logN, y = logDelta2, colour = abundance_class)) +
-      geom_point(alpha = 0.5) +
-      theme_classic() +
-      geom_line(data = cbind(df_rare_common %>% filter(delta2_Rel_Cover > 0), pred = predict(idee2)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
-      theme(legend.position = "none",
-            panel.spacing = unit(2, "lines"))  # adding space between panels
-)
-##essai:
-df_model <- df_rare_common %>% 
-  filter(delta2_Rel_Cover > 0) %>%
-  mutate(abundance_class = factor(abundance_class, levels = c("Rare","Intermediate","Common")))
-
-newdat <- expand.grid(
-  logN = seq(min(df_model$logN), max(df_model$logN), length.out = 100),
-  abundance_class = levels(df_model$abundance_class)
-)
-newdat$pred <- predict(idee2, newdat, re.form = NA)
-
-ggplot(df_model, aes(x = logN, y = logDelta2, colour = abundance_class)) +
-  geom_point(alpha = 0.5) +
-  geom_line(data = newdat, aes(y = pred), size = 1) +
-  theme_classic()
-
-
-#enfait on veut des pentes différentes par region (ou site?)
-idee3 <- lmer(
-   logDelta2 ~ 
-    logN + (1 + logN|Region/abundance_class)+
-     (1|Elevation)+ 
-     (1| Species),                 
-  data = df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-summary(idee3)
-
-plot(idee3)
-qqnorm(resid(idee3))
-qqline(resid(idee3))
-
-### plot
-(mm_plot <- ggplot(df_rare_common, aes(x = logN, y = logDelta2, colour = abundance_class)) +
-      facet_wrap(~Region, nrow=2) +   # a panel for each mountain range
-      geom_point(alpha = 0.5) +
-      theme_classic() +
-      geom_line(data = cbind(df_rare_common %>% filter(delta2_Rel_Cover > 0), pred = predict(idee3)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
-      theme(legend.position = "none",
-            panel.spacing = unit(2, "lines"))  # adding space between panels
-)
-
-# extraire les effets aléatoires
-re <- ranef(idee3) 
-
-# regarder l'effet aléatoire pour Region:abundance_class
-re$`abundance_class:Region`
-
-###Attention: la pente des rares et communes varie par région, et il faut sommer l’effet fixe + l’effet aléatoire pour chaque combinaison pour obtenir la pente réelle.
-
-# extraire effets fixes et aléatoires
-fixed_slope <- fixef(idee3)["logN"]  # pente globale / 1.017053
-re_slopes <- ranef(idee3)$`abundance_class:Region`  # effets aléatoires
-
-# créer un tableau 
-slopes_table <- re_slopes %>%
-  tibble::rownames_to_column("Class_Region") %>%
-  separate(Class_Region, into = c("abundance_class", "Region"), sep = ":") %>%
-  filter(abundance_class != "Intermediate") %>%
-  mutate(pente_specifique = 1.017053 + logN)  # pente spécifique = effet fixe + effet aléatoire
-
-control_origin<- slopes_table %>%
-  group_by(abundance_class)%>%
-  summarise(mean= mean(pente_specifique)) %>%
-  mutate(Treatment = "Control_Origin")
-
-control_origin
-
-control_origin_plot <- ggplot(slopes_table) +
-  aes(
-    x = Region,
-    y = pente_specifique,
-    colour = abundance_class
-  ) +
-  geom_point(size = 4L) +
-  scale_color_manual(
-    values = c(Common = "#30CB35",
-    Rare = "#C666E6")
-  ) +
-  labs(y = "Slope") +
-    ggtitle("Control Origin")+
-  theme_minimal()+
-    theme(axis.text.x = element_text(angle = 52L))
-
-ggsave(plot = control_origin_plot, filename = "./Figures/control_origin_plot.jpeg", create.dir = T)
-```
-
-###Control_destination
-```{r}
-
-df_rare_common <- control_dest_data %>%
-  group_by(Region) %>% #calcul des abondances rare vs communes au niveau de la region
-  mutate(abundance_class = case_when(
-    Rel_Cover_initial <= quantile(Rel_Cover_initial, 0.10) ~ "Rare", #gamme comparable de tailles d’échantillon par classe
-    Rel_Cover_initial >= quantile(Rel_Cover_initial, 0.90) ~ "Common",
-    TRUE ~ "Intermediate"
-  ))
-
-idee1 <- lmer(logDelta2 ~ logN+
-                (1|Region/destSiteID/destPlotID) + #prend en compte variance ente region, enter site par region et ente plot par site
-                (1|PlotSize) +
-                (1|Elevation) +
-                (1|delta_years)+
-                (1|Species), 
-                             data= df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-
-summary(idee1)
-
-##########################################################################
-#From the tree:
-# - I can talk you out of PlotSize + delta_years
-# - Elevation, categorical (n=29) , I don't want estimates of the different elevation
-# -destPlotID, categorical (n=197), I don't want estimates of the different plots
-# -Species, categorical (n=443), I don't want estimates of the different plots
-
-  
-#2 pentes différentes 
-idee2 <- lmer(
-   logDelta2 ~ 
-    logN * abundance_class +  # effet fixe global (avec differences de pentes entre Rare/Intermediate/Common)
-     (1|destPlotID) +   
-     (1|Elevation)+ 
-     (1| Species),                 
-  data = df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-summary(idee2)
-
-plot(idee2)
-qqnorm(resid(idee2))
-qqline(resid(idee2))
-
-#enfait on veut des pentes différentes par region (ou site?)
-idee3 <- lmer(
-   logDelta2 ~ 
-    logN + (1 + logN|Region/abundance_class)+
-     (1|Elevation)+ 
-     (1| Species),                 
-  data = df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-summary(idee3)
-
-plot(idee3)
-qqnorm(resid(idee3))
-qqline(resid(idee3))
-
-### plot
-(mm_plot <- ggplot(df_rare_common, aes(x = logN, y = logDelta2, colour = abundance_class)) +
-      facet_wrap(~Region, nrow=2) +   # a panel for each mountain range
-      geom_point(alpha = 0.5) +
-      theme_classic() +
-      geom_line(data = cbind(df_rare_common %>% filter(delta2_Rel_Cover > 0), pred = predict(idee3)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
-      theme(legend.position = "none",
-            panel.spacing = unit(2, "lines"))  # adding space between panels
-)
-
-# extraire les effets aléatoires
-re <- ranef(idee3) 
-
-# regarder l'effet aléatoire pour Region:abundance_class
-re$`abundance_class:Region`
-
-###Attention: la pente des rares et communes varie par région, et il faut sommer l’effet fixe + l’effet aléatoire pour chaque combinaison pour obtenir la pente réelle.
-
-# extraire effets fixes et aléatoires
-fixed_slope <- fixef(idee3)["logN"]  # pente globale 
-re_slopes <- ranef(idee3)$`abundance_class:Region`  # effets aléatoires
-
-# créer un tableau 
-slopes_table <- re_slopes %>%
-  tibble::rownames_to_column("Class_Region") %>%
-  separate(Class_Region, into = c("abundance_class", "Region"), sep = ":") %>%
-  filter(abundance_class != "Intermediate") %>%
-  mutate(pente_specifique = fixed_slope + logN)  # pente spécifique = effet fixe + effet aléatoire
-
-control_dest<- slopes_table %>%
-  group_by(abundance_class)%>%
-  summarise(mean= mean(pente_specifique)) %>%
-  mutate(Treatment = "Control_Destination")
-
-control_dest
-
-control_dest_plot <- ggplot(slopes_table) +
-  aes(
-    x = Region,
-    y = pente_specifique,
-    colour = abundance_class
-  ) +
-  geom_point(size = 4L) +
-  scale_color_manual(
-    values = c(Common = "#30CB35",
-    Rare = "#C666E6")
-  ) +
-  labs(y = "Slope") +
-    ggtitle("Control Destination")+
-  theme_minimal()+
-    theme(axis.text.x = element_text(angle = 52L))
-
-ggsave(plot = control_dest_plot, filename = "./Figures/control_dest_plot.jpeg", create.dir = T)
-```
-
-###Warm
-```{r}
-
-df_rare_common <- warm_data %>%
-  group_by(Region) %>% #calcul des abondances rare vs communes au niveau de la region
-  mutate(abundance_class = case_when(
-    Rel_Cover_initial <= quantile(Rel_Cover_initial, 0.10) ~ "Rare", #gamme comparable de tailles d’échantillon par classe
-    Rel_Cover_initial >= quantile(Rel_Cover_initial, 0.90) ~ "Common",
-    TRUE ~ "Intermediate"
-  ))
-
-idee1 <- lmer(logDelta2 ~ logN+
-                (1|Region/destSiteID/destPlotID) + #prend en compte variance ente region, enter site par region et ente plot par site
-                (1|PlotSize) +
-                (1|Elevation) +
-                (1|delta_years)+
-                (1|Species), 
-                             data= df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-
-summary(idee1)
-
-##########################################################################
-#From the tree:
-# - I can talk you out of PlotSize + delta_years
-# - Elevation, categorical (n=29) , I don't want estimates of the different elevation
-# -destPlotID, categorical (n=197), I don't want estimates of the different plots
-# -Species, categorical (n=443), I don't want estimates of the different plots
-
-  
-#2 pentes différentes 
-idee2 <- lmer(
-   logDelta2 ~ 
-    logN * abundance_class +  # effet fixe global (avec differences de pentes entre Rare/Intermediate/Common)
-     (1|destPlotID) +   
-     (1|Elevation)+ 
-     (1| Species),                 
-  data = df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-summary(idee2)
-
-plot(idee2)
-qqnorm(resid(idee2))
-qqline(resid(idee2))
-
-#enfait on veut des pentes différentes par region (ou site?)
-idee3 <- lmer(
-   logDelta2 ~ 
-    logN + (1 + logN|Region/abundance_class)+
-     (1|Elevation)+ 
-     (1| Species),                 
-  data = df_rare_common %>% filter(delta2_Rel_Cover > 0))
-
-summary(idee3)
-
-plot(idee3)
-qqnorm(resid(idee3))
-qqline(resid(idee3))
-
-### plot
-(mm_plot <- ggplot(df_rare_common, aes(x = logN, y = logDelta2, colour = abundance_class)) +
-      facet_wrap(~Region, nrow=2) +   # a panel for each mountain range
-      geom_point(alpha = 0.5) +
-      theme_classic() +
-      geom_line(data = cbind(df_rare_common %>% filter(delta2_Rel_Cover > 0), pred = predict(idee3)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
-      theme(legend.position = "none",
-            panel.spacing = unit(2, "lines"))  # adding space between panels
-)
-
-# extraire les effets aléatoires
-re <- ranef(idee3) 
-
-# regarder l'effet aléatoire pour Region:abundance_class
-re$`abundance_class:Region`
-
-###Attention: la pente des rares et communes varie par région, et il faut sommer l’effet fixe + l’effet aléatoire pour chaque combinaison pour obtenir la pente réelle.
-
-# extraire effets fixes et aléatoires
-fixed_slope <- fixef(idee3)["logN"]  # pente globale / 1.523024
-re_slopes <- ranef(idee3)$`abundance_class:Region`  # effets aléatoires
-
-# créer un tableau 
-slopes_table <- re_slopes %>%
-  tibble::rownames_to_column("Class_Region") %>%
-  separate(Class_Region, into = c("abundance_class", "Region"), sep = ":") %>%
-  filter(abundance_class != "Intermediate") %>%
-  mutate(pente_specifique =fixed_slope + logN)  # pente spécifique = effet fixe + effet aléatoire
-
-warm<- slopes_table %>%
-  group_by(abundance_class)%>%
-  summarise(mean= mean(pente_specifique)) %>%
-  mutate(Treatment = "Warm")
-
-warm
-
-warm_plot <- ggplot(slopes_table) +
-  aes(
-    x = Region,
-    y = pente_specifique,
-    colour = abundance_class
-  ) +
-  geom_point(size = 4L) +
-  scale_color_manual(
-    values = c(Common = "#30CB35",
-    Rare = "#C666E6")
-  ) +
-  labs(y = "Slope") +
-    ggtitle("Warm")+
-  theme_minimal()+
-    theme(axis.text.x = element_text(angle = 52L))
-
-ggsave(plot = warm_plot, filename = "./Figures/warm_plot.jpeg", create.dir = T)
-```
-
-##Confidence intervals 
-```{r}
-#have confidence intervales
-library(emmeans)
-emtrends(idee2, ~ abundance_class, var = "logN", pbkrtest.limit = 4236)
-```
-
-
-##plots
-```{r}
-
-
-library(ggeffects)  # install the package first if you haven't already, then load it
-
-# Extract the prediction data frame
-pred.mm <- ggpredict(idee3, terms = c("logN"))  # this gives overall predictions for the model
-
-# Plot the predictions 
-
-(ggplot(pred.mm) + 
-   geom_line(aes(x = x, y = predicted)) +          # slope
-   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
-               fill = "lightgrey", alpha = 0.5) +  # error band
-   geom_point(data = df_rare_common,                      # adding the raw data (scaled values)
-              aes(x = logN, y = logDelta2, colour = Region)) +
-   theme_minimal()
-)
-
-library(sjPlot)
-
-# Visualise random effects 
-(re.effects <- plot_model(mixed.ranslope, type = "re", show.values = TRUE))
-
-# show summary
-summary(mixed.ranslope)
-
-```
-
-
-
-#Trait syndrome and functional distinctiveness
-```{r}
-
-status <- read.csv("winner_losers.csv")
-
-winner_species <- status %>%filter(status == "winner") %>% select(Species)
-
-#there is Salix herbaceae woody ? same for Vaccinium globulare
-
-
-loser_species <- status %>%filter(status == "loser") %>% select(Species)
-
-setdiff(loser_species,winner_species)
-setdiff(winner_species, loser_species)
-#le genre Potentilla is loser but some Potentilla species in winner
-
-# Load imputed mean trait dataset (TRY database)
-Sp_trait_TRY <- read.csv("imputed_traits_mean.csv", sep = ",", dec = ".")
-Sp_trait_TRY$Species <- gsub(" ", "_", Sp_trait_TRY$Species_name)
-
-# Log-transform continuous traits to normalize distributions
-Sp_trait_TRY_trans <- Sp_trait_TRY
-Sp_trait_TRY_trans[,5] <- log10(Sp_trait_TRY_trans[,5])    # Leaf area
-Sp_trait_TRY_trans[,8] <- log10(Sp_trait_TRY_trans[,8])    # Maximum height
-Sp_trait_TRY_trans[,9] <- ifelse(Sp_trait_TRY_trans[,9] == 0, 0.0001, Sp_trait_TRY_trans[,7])  # Avoid log(0) for seed mass
-Sp_trait_TRY_trans[,9] <- log10(Sp_trait_TRY_trans[,9])
-
-# Center and scale traits
-Sp_trait_TRY_trans[,c(5:11)] <- scale(Sp_trait_TRY_trans[,c(5:11)])
-
-#add status
-
-species_traits_statut <- left_join(Sp_trait_TRY_trans, status) %>%drop_na(status)
-
-
-# Plot trait differences across groups
-# (SSD, plant height, leaf area)
-
-
-# Define comparison pairs for statistical tests
-comparaisons <- list(
-  # Within-treatment comparisons
-  c("loser", "non-significant"),
-  c("loser", "winner"),
-  c("winner", "non-significant"))
-
-P1 <- ggplot(species_traits_statut, aes(x = status, y = trait_SSD_mgmm.3, fill = status)) +
-  geom_violin(trim = FALSE, alpha = 0.8, color = NA) + 
-  geom_boxplot(width = 0.15, position = position_dodge(width = 0.9), alpha = 0.7, outlier.shape = NA) + 
-  stat_compare_means(
-    comparisons = comparaisons,
-    method = "wilcox.test",
-    label = "p.signif",
-    hide.ns = TRUE,
-    geom = "text"
-  ) +
-  labs(x = "", y = "SSD") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-P2 <- ggplot(species_traits_statut, aes(x = status, y = trait_Max_height_m, fill = status)) +
-  geom_violin(trim = FALSE, alpha = 0.8, color = NA) + 
-  geom_boxplot(width = 0.15, position = position_dodge(width = 0.9), alpha = 0.7, outlier.shape = NA) + 
-  scale_y_log10() +
-  stat_compare_means(
-    comparisons = comparaisons,
-    method = "wilcox.test",
-    label = "p.signif",
-    hide.ns = TRUE,
-    geom = "text"
-  ) +
-  labs(x = "", y = "Plant height") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-P3 <- ggplot(species_traits_statut, aes(x = status, y = trait_Leaf_area_mm2, fill = status)) +
-  geom_violin(trim = FALSE, alpha = 0.8, color = NA) + 
-  geom_boxplot(width = 0.15, position = position_dodge(width = 0.9), alpha = 0.7, outlier.shape = NA) + 
-  scale_y_log10() +
-  stat_compare_means(
-    comparisons = comparaisons,
-    method = "wilcox.test",
-    label = "p.signif",
-    hide.ns = TRUE,
-    geom = "text"
-  ) +
-  labs(x = "", y = "Leaf area") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# ------------------------------------------------------------ #
-# STEP 6. PCA on trait data
-# ------------------------------------------------------------ #
-library(FactoMineR)
-library(factoextra)
-
-colnames(species_traits_statut)
-# Run PCA on standardized traits
-pca_result <- PCA(species_traits_statut[,5:11], scale.unit = TRUE, graph = TRUE)
-
-# Variance explained by each axis
-fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 100),
-         main = "Variance explained per axis")
-
-# Extract species coordinates in PCA space
-eig_values <- pca_result$eig
-significant_axes <- 1:ncol(pca_result$ind$coord)
-coords <- pca_result$ind$coord[, significant_axes, drop = FALSE]
-coord <- data.frame(Species = species_traits_statut$Species, coords)
-
-# Visualize species and trait loadings
-
-fviz_pca_ind(pca_result, label="none", habillage = factor(species_traits_statut$status),
-             pointshape = 16, 
-             pointsize =2,
-             palette = c("red", #loser
-                         "gray",
-                         "green" ))#winner 
- 
-
-# Compute distance matrix among species in PCA space
-coord2 <- coord
-rownames(coord2) <- coord2$Species
-coord2$Species <- NULL
-species_names <- rownames(coord2)
-
-
-Distance <- compute_dist_matrix(coord2, metric = "euclidean", center = FALSE, scale = FALSE)
-rownames(Distance) <- colnames(Distance) <- species_names
-```
 

@@ -1,0 +1,478 @@
+---
+title: "Density dependance"
+output: html_document
+date: "2026-04-22"
+---
+
+#library
+```{r}
+library(readr)
+# library(here)
+# library(tidyverse)   
+# library(readxl)
+# library(ggpubr)
+# library(funrar)
+ library(dplyr)
+ library(tidyr)
+# library(stringr)
+ library(ggplot2)
+# library(TNRS) #c'est une application, pas une base de données
+# library(emmeans)
+# library(lme4)
+# library(stargazer)
+# library(ggeffects)
+```
+
+
+#Density dependance
+
+```{r}
+
+#data
+site_species_abs_abund <- read_csv("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/Transplantation Alpine/TransPlantAlpin/intermediate data/site_species_abs_abund.csv")
+
+#structure of data
+dim(site_species_abs_abund)
+length(unique(site_species_abs_abund$Region))
+length(unique(site_species_abs_abund$Treatment))
+
+
+site_species_abs_abund <- site_species_abs_abund %>% filter(Region =="CH_Calanda")
+
+
+```
+
+
+##warm
+```{r}
+
+#ABSOLUTE abundance per treatement
+site_species_warm <- site_species_abs_abund %>%
+  filter(Treatment =="Warm")
+
+
+# Format long par plot x espèce x année
+dd_data_long <- site_species_warm %>%
+  pivot_longer(
+    cols = !c("Region", "Year", "Treatment", "originSiteID", "destSiteID", "destPlotID"),
+    names_to  = "Species",
+    values_to = "Cover"
+  )
+
+#savoir si toutes mes Species#savoir si toutes mes années sont consécutives?
+# A<-dd_data %>%
+#   arrange(Region, Treatment, destSiteID, destPlotID, Species, Year) %>%
+#   group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+#   mutate(gap = Year - lag(Year)) %>%
+#   filter(!is.na(gap)) %>%
+#   count(gap) %>%
+#   arrange(desc(n))
+# 
+# table(A$gap)
+# 
+# B<- A %>%
+#   filter(gap >1)
+
+
+# Calculer r(t) = log(N(t+1)/N(t)) par espèce x traitement et par region et plot 
+#on garde au niveau de chaque plot car la densité dependance est un processus intra plot
+dd_data <- dd_data_long %>%
+  arrange(Region, Treatment, destSiteID, destPlotID, Species, Year) %>% #savoir si toutes mes années sont consécutives? bien mettre arrange year avant lead
+  group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+  mutate(
+    Cover_next = lead(Cover), #pour chaque ligne récupère la valeur de la ligne suivante dans le groupe.
+    Year_next  = lead(Year),
+    delta_t    = Year_next - Year #les années sont enfait pas tjs consécutives
+  ) %>%
+  filter(
+    !is.na(Cover_next), #ne prendre que les espèce présente initial / final : les persistantes, on exclue les colonisatrice et les espèce qui disparaissent. 
+    Cover > 0,        # N(t) doit être présent
+    Cover_next > 0,   # N(t+1) doit être présent
+  ) %>%
+  mutate(
+    r    = log(Cover_next / Cover) / delta_t,
+    logN = log(Cover)
+  ) %>%
+  ungroup()
+
+#regression pour la densite dependance
+#get residuals
+#on reste aussi au niveau de chaque plot car la densité dependance est un processus intra plot
+residuals_warm <- dd_data %>%
+  filter(event == "persistence")%>%
+  group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+  filter(n() >= 4) %>%
+  group_modify(~ {
+    mod <- lm(r ~ logN, data = .x)
+    slope <- coef(mod)["logN"]  # On extrait la pente pour logN
+    .x %>%
+      mutate(
+        residual = resid(mod),
+        slope = slope  # On ajoute la pente comme colonne
+      )
+  }) %>%
+  ungroup()
+
+#summery of slope per treatment per region per destSite
+residuals_warm %>%
+  group_by(Region, Treatment, destSiteID)%>%
+  summarise(mean_slope = mean(slope, na.rm=T))
+```
+
+#boucle?
+
+```{r}
+
+#apply chisholm on the residuals of the previous regression
+# Agréger les résidus par espèce x plot 
+chisholm_residuals <- residuals_warm %>%
+  arrange(Region, Treatment, destSiteID, Species, Year) %>%  # tri explicite
+  group_by(Region, Treatment, originSiteID, destSiteID, Species) %>%
+  summarise(
+    log_mean_epsilon2 = log10(mean(residual^2)), #y-axis: variance des résidus across all pas de temps
+    logN_initial      = log10(first(Cover)),   # x-axis: abondance initiale
+    n_transitions     = n(),
+    .groups = "drop"
+  ) %>%
+  filter(
+    is.finite(log_mean_epsilon2),
+    is.finite(logN_initial)
+  )
+
+
+regions <- unique(chisholm_residuals$Region)
+all_results_residuals <- data.frame()
+
+for (i in regions) {
+  data_region <- chisholm_residuals %>% filter(Region == i) 
+  
+  results <- data_region %>%
+    group_by(Treatment, originSiteID, destSiteID) %>%
+    group_modify(~ {
+      df <- .x
+      mod <- lm(log_mean_epsilon2 ~ logN_initial, data = df)
+      
+      tibble(
+        n_species  = length(unique(df$Species)),
+        n_obs      = nrow(df),
+        slope      = round(coef(mod)["logN_initial"], 3),
+        intercept  = round(coef(mod)["(Intercept)"], 3),
+        se_slope   = round(summary(mod)$coefficients["logN_initial", "Std. Error"], 3),
+        ci_low     = round(confint(mod, parm = "logN_initial")[1], 3),
+        ci_high    = round(confint(mod, parm = "logN_initial")[2], 3),
+        r2         = round(summary(mod)$r.squared, 3)
+      )
+    }) %>%
+    mutate(Region = i) %>%
+    relocate(Region)
+  
+  all_results_residuals <- rbind(all_results_residuals, results)
+}
+
+print(all_results_residuals)
+```
+
+
+```{r}
+# data
+site_species_abs_abund <- read_csv(here("intermediate data", 
+                                        "site_species_abs_abund.csv"))
+
+treatments <- unique(site_species_abs_abund$Treatment)
+all_results_residuals <- data.frame()
+
+for (trt in treatments) {
+  
+  dd_data_long <- site_species_abs_abund %>%
+    filter(Treatment == trt) %>%
+    pivot_longer(
+      cols      = !c("Region","Year","Treatment","originSiteID","destSiteID","destPlotID"),
+      names_to  = "Species",
+      values_to = "Cover"
+    )
+  
+  dd_data <- dd_data_long %>%
+    arrange(Region, Treatment, destSiteID, destPlotID, Species, Year) %>%
+    group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+    mutate(
+      Cover_next = lead(Cover),
+      Year_next  = lead(Year),
+      delta_t    = Year_next - Year
+    ) %>%
+    filter(!is.na(Cover_next), Cover > 0, Cover_next > 0) %>%
+    mutate(r = log10(Cover_next / Cover) / delta_t, logN = log10(Cover)) %>%
+    ungroup()
+  
+  residuals_trt <- dd_data %>%
+    group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+    filter(n() >= 4) %>%
+    group_modify(~ {
+      tryCatch({
+        mod <- lm(r ~ logN, data = .x)
+        .x %>% mutate(
+          residual = resid(mod),
+          slope    = coef(mod)["logN"]
+        )
+      }, error = function(e) {
+        .x %>% mutate(residual = NA_real_, slope = NA_real_)
+      })
+    }) %>%
+    ungroup() %>%
+    filter(!is.na(residual))
+  
+  chisholm_residuals <- residuals_trt %>%
+    arrange(Region, Treatment, destSiteID, Species, Year) %>%
+    group_by(Region, Treatment, originSiteID, destSiteID, Species) %>%
+    summarise(
+      log_mean_epsilon2 = log10(mean(residual^2)),
+      logN_initial      = log10(first(Cover)),
+      n_transitions     = n(),
+      .groups           = "drop"
+    ) %>%
+    filter(
+      is.finite(log_mean_epsilon2),
+      is.finite(logN_initial)
+    )
+  
+  for (i in unique(chisholm_residuals$Region)) {
+    
+    region_data <- chisholm_residuals %>% filter(Region == i)
+    
+    site_groups <- region_data %>%
+      group_by(Treatment, originSiteID, destSiteID) %>%
+      summarise(n = n(), .groups = "drop") %>%
+      filter(n >= 5)  # minimum espèces pour régression stable
+    
+    if (nrow(site_groups) == 0) next  # skip si aucun site avec assez d'espèces
+    
+    results <- region_data %>%
+      inner_join(site_groups %>% select(-n),
+                 by = c("Treatment","originSiteID","destSiteID")) %>%
+      group_by(Treatment, originSiteID, destSiteID) %>%
+      group_modify(~ {
+        tryCatch({
+          mod <- lm(log_mean_epsilon2 ~ logN_initial, data = .x)
+          tibble(
+            n_species = nrow(.x),
+            slope     = round(coef(mod)["logN_initial"],                              3),
+            intercept = round(coef(mod)["(Intercept)"],                               3),
+            se_slope  = round(summary(mod)$coefficients["logN_initial","Std. Error"], 3),
+            ci_low    = round(confint(mod, parm = "logN_initial")[1],                 3),
+            ci_high   = round(confint(mod, parm = "logN_initial")[2],                 3),
+            r2        = round(summary(mod)$r.squared,                                 3)
+          )
+        }, error = function(e) {
+          tibble(n_species = nrow(.x), slope = NA_real_, intercept = NA_real_,
+                 se_slope = NA_real_, ci_low = NA_real_, ci_high = NA_real_,
+                 r2 = NA_real_)
+        })
+      }) %>%
+      mutate(Region = i) %>%
+      relocate(Region)
+    
+    all_results_residuals <- rbind(all_results_residuals, results)
+  }
+}
+
+print(all_results_residuals)
+
+#plot
+ggplot(all_results_residuals) +
+    aes(x = Region, y = slope, colour = Treatment) +
+    geom_point() +
+    theme_minimal() +
+  scale_colour_manual(
+        values = c(
+            "Warm"           = "firebrick1",
+            "Control_Origin" = "dodgerblue",
+            "Control_Destination"   = "orange"
+        )
+    ) 
+```
+
+
+##control origin
+```{r}
+
+site_species_CO <- site_species_abs_abund %>%
+  filter(Treatment =="Control_Origin")
+
+# Format long par plot x espèce x année
+dd_data <- site_species_CO %>%
+  pivot_longer(
+    cols = !c("Region", "Year", "Treatment", "originSiteID", "destSiteID", "destPlotID"),
+    names_to  = "Species",
+    values_to = "Cover"
+  )
+
+#savoir si toutes mes années sont consécutives?
+# A<-dd_data %>%
+#   arrange(Region, Treatment, destSiteID, destPlotID, Species, Year) %>%
+#   group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+#   mutate(gap = Year - lag(Year)) %>%
+#   filter(!is.na(gap)) %>%
+#   count(gap) %>%
+#   arrange(desc(n))
+# 
+# table(A$gap)
+# 
+# B<- A %>%
+#   filter(gap >1)
+
+# Calculer r(t) = log(N(t+1)/N(t)) par espèce x traitement et par region et plot 
+dd_data <- dd_data %>%
+  arrange(Region, Treatment, destSiteID, destPlotID, Species, Year) %>% #savoir si toutes mes années sont consécutives? bien mettre arrange year avant lead
+  group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+  mutate(
+    Cover_next = lead(Cover), #pour chaque ligne récupère la valeur de la ligne suivante dans le groupe.
+    Year_next  = lead(Year),
+    delta_t    = Year_next - Year 
+  ) %>%
+  filter(
+    !is.na(Cover_next),
+    Cover > 0,        # N(t) doit être présent
+    Cover_next > 0,   # N(t+1) doit être présent
+  ) %>%
+  mutate(
+    r    = log(Cover_next / Cover) / delta_t,
+    logN = log(Cover)
+  ) %>%
+  ungroup()
+
+nrow(dd_data)
+summary(dd_data$r) #r proche de zero, légerement positif avec la moyenne
+
+#regression
+regions <- unique(dd_data$Region)
+dd_results_CO <- data.frame()
+
+for (i in regions) {
+  
+    df <-  dd_data %>% 
+      filter(Region ==i )
+    
+    if (nrow(df) < 10) next
+    
+    mod     <- lm(r ~ logN, data = df)
+    c_slope <- coef(mod)["logN"]
+    c_pval  <- summary(mod)$coefficients["logN", "Pr(>|t|)"]
+    
+    dd_results_CO <- rbind(dd_results_CO, data.frame(
+      Region       = i,
+       originSiteID = unique(df$originSiteID),
+      destSiteID   = unique(df$destSiteID),
+      dd_slope     = round(c_slope, 4),
+      dd_pval      = round(c_pval,  4),
+      dd_n         = nrow(df),
+     dd_sign = ifelse(c_pval < 0.05 & c_slope < 0, "dd-dep", "not dd-dep"),
+     Treatment = "Control_Origin"
+    ))
+  }
+
+View(dd_results_CO)
+table(dd_results_CO$dd_sign)
+```
+
+##control dest
+```{r}
+site_species_CD <- site_species_abs_abund %>%
+  filter(Treatment =="Control_Destination")
+
+# Format long par plot x espèce x année
+dd_data <- site_species_CD %>%
+  pivot_longer(
+    cols = !c("Region", "Year", "Treatment", "originSiteID", "destSiteID", "destPlotID"),
+    names_to  = "Species",
+    values_to = "Cover"
+  )
+
+#savoir si toutes mes années sont consécutives?
+# A<-dd_data %>%
+#   arrange(Region, Treatment, destSiteID, destPlotID, Species, Year) %>%
+#   group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+#   mutate(gap = Year - lag(Year)) %>%
+#   filter(!is.na(gap)) %>%
+#   count(gap) %>%
+#   arrange(desc(n))
+# 
+# table(A$gap)
+# 
+# B<- A %>%
+#   filter(gap >1)
+
+# Calculer r(t) = log(N(t+1)/N(t)) par espèce x traitement et par region et plot 
+dd_data <- dd_data %>%
+  arrange(Region, Treatment, destSiteID, destPlotID, Species, Year) %>% #savoir si toutes mes années sont consécutives? bien mettre arrange year avant lead
+  group_by(Region, Treatment, destSiteID, destPlotID, Species) %>%
+  mutate(
+    Cover_next = lead(Cover), #pour chaque ligne récupère la valeur de la ligne suivante dans le groupe.
+    Year_next  = lead(Year),
+    delta_t    = Year_next - Year #les années sont enfait pas tjs consécutives : j'accepte les transitions sur 1 an (normal) ou 2 ans (un relevé manqué occasionnellement), mais je rejette les sauts de 3 ans ou plus car le taux de croissance annualisé devient trop approximatif sur une si longue fenêtre
+  ) %>%
+  filter(
+    !is.na(Cover_next),
+    Cover > 0,        # N(t) doit être présent
+    Cover_next > 0,   # N(t+1) doit être présent
+  ) %>%
+  mutate(
+    r    = log(Cover_next / Cover) / delta_t,
+    logN = log(Cover)
+  ) %>%
+  ungroup()
+
+nrow(dd_data)
+summary(dd_data$r) #r proche de zero, légerement positif avec la moyenne
+
+#regression
+regions <- unique(dd_data$Region)
+dd_results_CD <- data.frame()
+
+for (i in regions) {
+  
+    df <-  dd_data %>% 
+      filter(Region ==i )
+    
+    if (nrow(df) < 10) next
+    
+    mod     <- lm(r ~ logN, data = df)
+    c_slope <- coef(mod)["logN"]
+    c_pval  <- summary(mod)$coefficients["logN", "Pr(>|t|)"]
+    
+    dd_results_CD <- rbind(dd_results_CD, data.frame(
+      Region       = i,
+      originSiteID = unique(df$originSiteID),
+      destSiteID   = unique(df$destSiteID),
+      dd_slope     = round(c_slope, 4),
+      dd_pval      = round(c_pval,  4),
+      dd_n         = nrow(df),
+     dd_sign = ifelse(c_pval < 0.05 & c_slope < 0, "dd-dep", "not dd-dep"),
+     Treatment = "Control_dest"
+    ))
+  }
+
+View(dd_results_CD)
+table(dd_results_CD$dd_sign) 
+
+```
+
+
+##combine
+```{r}
+density_dep <- rbind(dd_results_warm, dd_results_CO, dd_results_CD)
+
+ggplot(density_dep) +
+  aes(x = Region, y = dd_slope, colour = Treatment) +
+  geom_point() +
+    scale_color_manual(
+    values = c(
+      "Warm"           = "firebrick1",
+      "Control_Origin" = "dodgerblue",
+      "Control_dest"   = "orange"
+    )
+  ) +
+  theme_minimal()
+
+```
+
+
+
