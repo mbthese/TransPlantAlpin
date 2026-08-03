@@ -1430,6 +1430,7 @@ for (i in regions) {
      # n_colonizer   <- status_summary$colonizer   %||% 0
       
       # regression
+      
       mod   <- lm(logDelta2_corrected ~ logN, data = df)
       slope <- coef(mod)["logN"]
       intercept <- coef(mod)["(Intercept)"]

@@ -1113,23 +1113,71 @@ site_species_CD_end <- site_species_CD_initial_long %>%
   )
 
 # Remove 0/0 cases (species absent both times)
-#remove immigration as in Chishom
-site_species_warm_end_clean <- site_species_warm_end %>%
-  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
-  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) #remove immigration
+data_full_warm <- site_species_warm_end %>%
+  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%  # retire seulement les 0/0
+  mutate(
+    dynamique_statut = case_when(
+      Abs_Cover_initial == 0   & Abs_Cover_final > 0  ~ "Colonizer",
+      Abs_Cover_final   == 0   & Abs_Cover_initial > 0 ~ "Extinct",
+      Abs_Cover_initial > 0    & Abs_Cover_final > 0   ~ "Persistent",
+      TRUE ~ NA_character_
+    )
+  )
 
-site_species_CO_end_clean <- site_species_CO_end %>%
+data_full_CO <- site_species_CO_end %>%
   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
-   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) 
+  mutate(
+    dynamique_statut = case_when(
+      Abs_Cover_initial == 0   & Abs_Cover_final > 0  ~ "Colonizer",
+      Abs_Cover_final   == 0   & Abs_Cover_initial > 0 ~ "Extinct",
+      Abs_Cover_initial > 0    & Abs_Cover_final > 0   ~ "Persistent",
+      TRUE ~ NA_character_
+    )
+  )
 
-site_species_CD_end_clean <- site_species_CD_end %>%
+data_full_CD <- site_species_CD_end %>%
   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
-  filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) 
+  mutate(
+    dynamique_statut = case_when(
+      Abs_Cover_initial == 0   & Abs_Cover_final > 0  ~ "Colonizer",
+      Abs_Cover_final   == 0   & Abs_Cover_initial > 0 ~ "Extinct",
+      Abs_Cover_initial > 0    & Abs_Cover_final > 0   ~ "Persistent",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Combiner les trois traitements
+data_full <- bind_rows(
+  data_full_warm %>% mutate(Treatment = "warm"),
+  data_full_CO   %>% mutate(Treatment = "Control_origin"),
+  data_full_CD   %>% mutate(Treatment = "Control_dest")
+) %>%
+  filter(!is.na(dynamique_statut))
+
+# Vérifier les effectifs
+data_full %>% count(dynamique_statut, Treatment)
+
+# ###############################################
+# site_species_warm_end_clean <- site_species_warm_end %>%
+#   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
+#   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) #remove immigration
+# 
+# site_species_CO_end_clean <- site_species_CO_end %>%
+#   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
+#    filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) 
+# 
+# site_species_CD_end_clean <- site_species_CD_end %>%
+#   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final == 0)) %>%
+#   filter(!(Abs_Cover_initial == 0 & Abs_Cover_final != 0)) 
 
 #save outputs
-write.csv(site_species_warm_end_clean, "./intermediate data/site_species_warm_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
-write.csv(site_species_CO_end_clean, "./intermediate data/site_species_CO_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
-write.csv(site_species_CD_end_clean, "./intermediate data/site_species_CD_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
+# write.csv(site_species_warm_end_clean, "./intermediate data/site_species_warm_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
+# write.csv(site_species_CO_end_clean, "./intermediate data/site_species_CO_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
+# write.csv(site_species_CD_end_clean, "./intermediate data/site_species_CD_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
+# 
+
+#save outputs
+write.csv(data_full, "./intermediate data/site_species_data_full_end_clean_abs_abund_cover_initial_final.csv", row.names = FALSE)
 ```
 
 

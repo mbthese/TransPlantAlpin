@@ -1,4 +1,11 @@
 ---
+title: "Manscript analysis"
+output: html_document
+date: "2026-07-29"
+editor_options: 
+  chunk_output_type: console
+---
+---
 title: "Density dependance"
 output: html_document
 date: "2026-04-22"
@@ -34,65 +41,14 @@ library(patchwork) #to combine plots
 library(MuMIn)#Lucie: conseil pour choisir les modèles. le package s'appelle multi-model inference, la fonction dredge va selectionner de manière automatique des subset models depuis le modele le plus general donné en entrée.
 library(sjPlot)
 library(jtools)#for summ function
+library(mice)
+library(VIM)
 ```
 
 
 #Data
 
 ```{r}
-#OLD
-
-
-# #data
-# site_species_abs_abund <- read_csv("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/Transplantation Alpine/TransPlantAlpin/intermediate data/site_species_abs_abund.csv")
-# 
-# #structure of data
-# dim(site_species_abs_abund)
-# length(unique(site_species_abs_abund$Region))
-# length(unique(site_species_abs_abund$Treatment))
-
-
-##data
-
-# warm_data <-read_csv(here("intermediate data", "site_species_warm_end_clean_abs_abund_cover_initial_final.csv")) %>%
-#   mutate(delta2_Abs_Cover = (Abs_Cover_final - Abs_Cover_initial)^2,
-#           delta_years = Year_final -Year_initial) %>%
-#   relocate(delta_years, .after= Year_final)  %>%
-#   mutate(logN = log10(Abs_Cover_initial),
-#          logDelta2 = log10(delta2_Abs_Cover),
-#          Treatment = "warm")
-# 
-# control_origin_data <- read.csv(here("intermediate data", "site_species_CO_end_clean_abs_abund_cover_initial_final.csv"))  %>%
-#   mutate(delta2_Abs_Cover = (Abs_Cover_final - Abs_Cover_initial)^2,
-#           delta_years = Year_final -Year_initial) %>%
-#   relocate(delta_years, .after= Year_final)  %>%
-#   mutate(logN = log10(Abs_Cover_initial),
-#          logDelta2 = log10(delta2_Abs_Cover),
-#          Treatment = "Control_origin")
-# 
-# 
-# control_dest_data <- read.csv(here("intermediate data", "site_species_CD_end_clean_abs_abund_cover_initial_final.csv"))  %>%
-#   mutate(delta2_Abs_Cover = (Abs_Cover_final - Abs_Cover_initial)^2,
-#           delta_years = Year_final -Year_initial) %>%
-#   relocate(delta_years, .after= Year_final)  %>%
-#   mutate(logN = log10(Abs_Cover_initial),
-#          logDelta2 = log10(delta2_Abs_Cover),
-#          Treatment = "Control_dest")
-# 
-# data <- rbind(warm_data, control_dest_data, control_origin_data)
-# 
-# # add variable elevation and plotSize
-# 
-# metadata <- read.csv(here("intermediate data","metadata.csv"))
-# 
-# data <-data %>% left_join(metadata %>% select(Region, destSiteID, Elevation, PlotSize)) %>%
-#   relocate(PlotSize, .after= destPlotID)
-# 
-# data <-data %>% relocate(Elevation, .after= destPlotID)
-# names(data)
-# 
-# unique(data$Region)
-
 ###################### New script with colonizers
 
 site_species_abs_abund <- read_csv("intermediate data/site_species_data_full_end_clean_abs_abund_cover_initial_final.csv")
@@ -195,137 +151,7 @@ data<- data%>%
 ```
 
 
-#chisholm with density dependan - ONLY persistants
-
-```{r}
-regions      <- unique(data$Region)
-all_results  <- data.frame()
-
-for (i in regions) {
-  
-  data_region <- data %>% filter(Region == i)
-  
-  results <- data_region %>%
-    group_by(Treatment, originSiteID, destSiteID) %>%
-    group_modify(~ {
-      
-      # Préparer les données 
-      df <- .x %>%
-        mutate(
-          delta2_corrected    = delta2_Abs_Cover + 0.00120,
-          logDelta2_corrected = log10(delta2_corrected)
-        ) %>%
-        filter(is.finite(logN))  # retire les colonisatrices (logN = -Inf)
-      
-      # ── Descripteurs du site ─────────────────────────────────────────
-      plots            <- paste(sort(unique(df$destPlotID)), collapse = ", ")
-      n_plots          <- length(unique(df$destPlotID))
-      n_species        <- length(unique(df$Species))
-      mean_elevation   <- mean(df$Elevation,   na.rm = TRUE)
-      mean_plot_size   <- mean(df$PlotSize,    na.rm = TRUE)
-      mean_delta_years <- mean(df$delta_years, na.rm = TRUE)
-      mean_delta_temp  <- mean(df$delta_temp,  na.rm = TRUE)
-      
-      # ── Statuts — noms exacts de dynamique_statut ────────────────────
-      n_persistent  <- sum(df$dynamique_statut == "Persistent", na.rm = TRUE)
-      n_disappeared <- sum(df$dynamique_statut == "Extinct",    na.rm = TRUE)
-      n_colonizer   <- sum(df$dynamique_statut == "Colonizer",  na.rm = TRUE)
-      
-      df_persistent <- df %>% filter(dynamique_statut == "Persistent") #faire que sur les persistentes
-      
-      # Gompertz = densité dependante
-      mod0 <- lm(
-        log(Abs_Cover_final / Abs_Cover_initial) ~ log(Abs_Cover_initial),
-        data = df_persistent
-      )
-      
-      df_persistent <- df_persistent %>%
-        mutate(
-          gompertz_resid     = resid(mod0),
-          gompertz_slope     = coef(mod0)["log(Abs_Cover_initial)"],
-          gompertz_intercept = coef(mod0)["(Intercept)"],
-          log_resid2         = log10(gompertz_resid^2),
-          Region             = i,
-          Treatment          = .y$Treatment,
-          originSiteID       = .y$originSiteID,
-          destSiteID         = .y$destSiteID
-        )
-      
-      # Chisholm 
-      df_chisholm <- df_persistent %>%
-        filter(is.finite(log_resid2), is.finite(logN))
-      
-      if (nrow(df_chisholm) < 3) {
-        return(tibble(
-          n_plots = n_plots, plots = plots, n_species = n_species,
-          n_obs = nrow(df_chisholm),
-          mean_elevation = round(mean_elevation, 3),
-          mean_plot_size = round(mean_plot_size, 4),
-          mean_delta_years = round(mean_delta_years, 2),
-          mean_delta_temp = round(mean_delta_temp, 3),
-          slope = NA_real_, intercept = NA_real_,
-          se_slope = NA_real_, se_intercept = NA_real_,
-          ci_low_slope = NA_real_, ci_high_slope = NA_real_,
-          ci_low_intercept = NA_real_, ci_high_intercept = NA_real_,
-          r2 = NA_real_,
-          n_persistent = n_persistent, n_disappeared = n_disappeared,
-          n_colonizer = n_colonizer,
-          pct_disappeared = round(n_disappeared / (n_persistent + n_disappeared) * 100, 1),
-          gompertz_data = list(df_persistent)
-        ))
-      }
-      
-      mod          <- lm(log_resid2 ~ logN, data = df_chisholm)
-      slope        <- coef(mod)["logN"]
-      intercept    <- coef(mod)["(Intercept)"]
-      se_slope     <- summary(mod)$coefficients["logN",          "Std. Error"]
-      se_intercept <- summary(mod)$coefficients["(Intercept)",   "Std. Error"]
-      r2           <- summary(mod)$r.squared
-      n_obs        <- nrow(df_chisholm)
-      
-      tibble(
-        n_plots           = n_plots,
-        plots             = plots,
-        n_species         = n_species,
-        n_obs             = n_obs,
-        mean_elevation    = round(mean_elevation,   3),
-        mean_plot_size    = round(mean_plot_size,   4),
-        mean_delta_years  = round(mean_delta_years, 2),
-        mean_delta_temp   = round(mean_delta_temp,  3),
-        slope             = round(slope,            3),
-        intercept         = round(intercept,        3),
-        se_slope          = round(se_slope,         3),
-        se_intercept      = round(se_intercept,     3),
-        ci_low_slope      = round(confint(mod, parm = "logN")[1],          3),
-        ci_high_slope     = round(confint(mod, parm = "logN")[2],          3),
-        ci_low_intercept  = round(confint(mod, parm = "(Intercept)")[1],   3),
-        ci_high_intercept = round(confint(mod, parm = "(Intercept)")[2],   3),
-        r2                = round(r2,               3),
-        n_persistent      = n_persistent,
-        n_disappeared     = n_disappeared,
-        n_colonizer       = n_colonizer,
-        pct_disappeared   = round(n_disappeared / (n_persistent + n_disappeared) * 100, 1),
-        gompertz_data     = list(df_persistent)
-      )
-    }) %>%
-    mutate(Region = i) %>%
-    relocate(Region)
-  
-  all_results <- rbind(all_results, results)
-}
-
-# ── Extraire après la boucle ──────────────────────────────────────────
-slopes_table <- all_results
-all_gompertz <- bind_rows(slopes_table$gompertz_data)
-
-# ── Vérifications ─────────────────────────────────────────────────────
-nrow(all_gompertz)
-sum(is.na(slopes_table$slope))
-slopes_table %>% count(Treatment)
-```
-
-
-#with colonisatrices & seuil
+#Chisholm with colonisatrices & seuil
 ```{r}
 
 k <- 5   # Seuil à choisir
@@ -337,15 +163,12 @@ for (i in regions) {
   data_region <- data %>% filter(Region == i)
   
   results <- data_region %>%
-    group_by(Treatment, originSiteID, destSiteID) %>%
+    group_by(Species, Treatment) %>% #alors qu'avant c'était  Treatment, originSiteID, destSiteID
     group_modify(~ {
       
        df <- .x 
-      #%>%
-      #   mutate(delta2_corrected    = delta2_Abs_Cover, # on ne rajoute plus + 0.00120
-      #          logDelta2_corrected = log10(delta2_corrected)) lignes initules c'etait pour ce que l'on faisait avant ; mod <- lm(logDelta2_corrected ~ logN, data = df) mais maintenant on utilise les résidus
-      
-      # ── Seuil de détectabilité pour les colonisatrices ───────────────
+   
+             # ── Seuil de détectabilité pour les colonisatrices ───────────────
       # Minimum de l'abondance FINALE non nulle dans ce site
       min_cover_final <- df %>%
         filter(Abs_Cover_final > 0) %>%
@@ -417,77 +240,27 @@ for (i in regions) {
       
       df_for_gompertz <- df_for_gompertz %>%
         mutate(
-          gompertz_resid     = resid(mod0),
-          gompertz_slope     = coef(mod0)["log(Abs_Cover_initial_adj)"],
-          gompertz_intercept = coef(mod0)["(Intercept)"],
-          log_resid2         = log10(gompertz_resid^2),
+          
+          #r 
+          r= log(Abs_Cover_final / Abs_Cover_initial_adj),
+          
+          #a
+          a = coef(mod0)["(Intercept)"],
+          
+          #c
+          c     = coef(mod0)["log(Abs_Cover_initial_adj)"],
+          
+          #epsilon
+          epsilon    = resid(mod0),
+          
           logN               = logN_adj,  # utiliser logN ajusté pour Chisholm
           Region             = i,
-          Treatment          = .y$Treatment,
-          originSiteID       = .y$originSiteID,
-          destSiteID         = .y$destSiteID
+          detection_threshold = detection_threshold, 
+          k= k
         )
       
-      # ── Chisholm ─────────────────────────────────────────────────────
-      df_chisholm <- df_for_gompertz %>%
-        filter(is.finite(log_resid2), is.finite(logN))
+     return(df_for_gompertz)
       
-      if (nrow(df_chisholm) < 3) {
-        return(tibble(
-          n_plots = n_plots, plots = plots, n_species = n_species,
-          n_obs = nrow(df_chisholm),
-          mean_elevation = round(mean_elevation, 3),
-          mean_plot_size = round(mean_plot_size, 4),
-          mean_delta_years = round(mean_delta_years, 2),
-          mean_delta_temp = round(mean_delta_temp, 3),
-          detection_threshold = round(detection_threshold, 4),
-          k = k,
-          slope = NA_real_, intercept = NA_real_,
-          se_slope = NA_real_, se_intercept = NA_real_,
-          ci_low_slope = NA_real_, ci_high_slope = NA_real_,
-          ci_low_intercept = NA_real_, ci_high_intercept = NA_real_,
-          r2 = NA_real_,
-          n_persistent = n_persistent, n_disappeared = n_disappeared,
-          n_colonizer = n_colonizer,
-          pct_disappeared = round(n_disappeared / (n_persistent + n_disappeared) * 100, 1),
-          gompertz_data = list(df_for_gompertz)
-        ))
-      }
-      
-      mod          <- lm(log_resid2 ~ logN, data = df_chisholm)
-      slope        <- coef(mod)["logN"]
-      intercept    <- coef(mod)["(Intercept)"]
-      se_slope     <- summary(mod)$coefficients["logN",          "Std. Error"]
-      se_intercept <- summary(mod)$coefficients["(Intercept)",   "Std. Error"]
-      r2           <- summary(mod)$r.squared
-      n_obs        <- nrow(df_chisholm)
-      
-      tibble(
-        n_plots           = n_plots,
-        plots             = plots,
-        n_species         = n_species,
-        n_obs             = n_obs,
-        mean_elevation    = round(mean_elevation,      3),
-        mean_plot_size    = round(mean_plot_size,      4),
-        mean_delta_years  = round(mean_delta_years,    2),
-        mean_delta_temp   = round(mean_delta_temp,     3),
-        detection_threshold = round(detection_threshold, 4),
-        k                 = k,
-        slope             = round(slope,               3),
-        intercept         = round(intercept,           3),
-        se_slope          = round(se_slope,            3),
-        se_intercept      = round(se_intercept,        3),
-        ci_low_slope      = round(confint(mod, parm = "logN")[1],          3),
-        ci_high_slope     = round(confint(mod, parm = "logN")[2],          3),
-        ci_low_intercept  = round(confint(mod, parm = "(Intercept)")[1],   3),
-        ci_high_intercept = round(confint(mod, parm = "(Intercept)")[2],   3),
-        r2                = round(r2,                  3),
-        n_persistent      = n_persistent,
-        n_disappeared     = n_disappeared,
-        n_colonizer       = n_colonizer,
-        pct_disappeared   = round(n_disappeared / (n_persistent + n_disappeared) * 100, 1),
-        gompertz_data     = list(df_for_gompertz)
-      )
     }) %>%
     mutate(Region = i) %>%
     relocate(Region)
@@ -495,12 +268,51 @@ for (i in regions) {
   all_results <- rbind(all_results, results)
 }
 
-slopes_table <- all_results
-all_gompertz <- bind_rows(slopes_table$gompertz_data)
-
-#les différents seuils
 
 
+dim(all_results)
+names(all_results)
+
+# a et c sont constants par site — vérifier
+all_results %>%
+  group_by(Region, Treatment, originSiteID, destSiteID) %>%
+  summarise(
+    n_unique_a = n_distinct(round(a, 6)),
+    n_unique_c = n_distinct(round(c, 6)),
+    .groups = "drop"
+  ) %>%
+  summary()
+
+
+#all_results : 1 ligne par espèce × plot × site × traitement × région
+
+Colonnes clés :
+- r       : taux de croissance observé (varie par espèce × plot)
+- a       : intercept Gompertz (CONSTANT par site × traitement)
+- c       : pente Gompertz (CONSTANT par site × traitement)
+- epsilon : résidu (varie par espèce × plot)
+- logN    : log(abondance initiale ajustée)
+
+
+# Table à l'échelle du site pour a et c
+site_params <- all_results %>%
+  distinct(Region, Treatment, originSiteID, destSiteID, a, c) %>%
+  left_join(
+    # CWM des traits pour le site
+    cwm_cwv %>% filter(time == "Abs_Cover_initial"),
+    by = c("Region", "Treatment", "originSiteID", "destSiteID")
+  )
+
+# Table à l'échelle espèce × plot pour r et epsilon
+species_params <- all_results %>%
+  select(Region, Treatment, originSiteID, destSiteID,
+         destPlotID, Species, dynamique_statut,
+         r, epsilon, log_epsilon_sq, logN,
+         Elevation, delta_temp)
+```
+
+
+```{r}
 # Tester k = 1, 2, 5, 10
 sensitivity_results <- map_dfr(c(1, 2, 5, 10), function(k_val) {
   
@@ -606,66 +418,7 @@ for (i in regions) {
           destSiteID         = .y$destSiteID
         )
       
-      # ── Chisholm ─────────────────────────────────────────────────────
-      df_chisholm <- df_for_gompertz %>%
-        filter(is.finite(log_resid2), is.finite(logN))
       
-      if (nrow(df_chisholm) < 3) {
-        return(tibble(
-          n_plots = n_plots, plots = plots, n_species = n_species,
-          n_obs = nrow(df_chisholm),
-          mean_elevation = round(mean_elevation, 3),
-          mean_plot_size = round(mean_plot_size, 4),
-          mean_delta_years = round(mean_delta_years, 2),
-          mean_delta_temp = round(mean_delta_temp, 3),
-          detection_threshold = round(detection_threshold, 4),
-          k = k,
-          slope = NA_real_, intercept = NA_real_,
-          se_slope = NA_real_, se_intercept = NA_real_,
-          ci_low_slope = NA_real_, ci_high_slope = NA_real_,
-          ci_low_intercept = NA_real_, ci_high_intercept = NA_real_,
-          r2 = NA_real_,
-          n_persistent = n_persistent, n_disappeared = n_disappeared,
-          n_colonizer = n_colonizer,
-          pct_disappeared = round(n_disappeared / (n_persistent + n_disappeared) * 100, 1),
-          gompertz_data = list(df_for_gompertz)
-        ))
-      }
-      
-      mod          <- lm(log_resid2 ~ logN, data = df_chisholm)
-      slope        <- coef(mod)["logN"]
-      intercept    <- coef(mod)["(Intercept)"]
-      se_slope     <- summary(mod)$coefficients["logN",          "Std. Error"]
-      se_intercept <- summary(mod)$coefficients["(Intercept)",   "Std. Error"]
-      r2           <- summary(mod)$r.squared
-      n_obs        <- nrow(df_chisholm)
-      
-      tibble(
-        n_plots           = n_plots,
-        plots             = plots,
-        n_species         = n_species,
-        n_obs             = n_obs,
-        mean_elevation    = round(mean_elevation,      3),
-        mean_plot_size    = round(mean_plot_size,      4),
-        mean_delta_years  = round(mean_delta_years,    2),
-        mean_delta_temp   = round(mean_delta_temp,     3),
-        detection_threshold = round(detection_threshold, 4),
-        k                 = k,
-        slope             = round(slope,               3),
-        intercept         = round(intercept,           3),
-        se_slope          = round(se_slope,            3),
-        se_intercept      = round(se_intercept,        3),
-        ci_low_slope      = round(confint(mod, parm = "logN")[1],          3),
-        ci_high_slope     = round(confint(mod, parm = "logN")[2],          3),
-        ci_low_intercept  = round(confint(mod, parm = "(Intercept)")[1],   3),
-        ci_high_intercept = round(confint(mod, parm = "(Intercept)")[2],   3),
-        r2                = round(r2,                  3),
-        n_persistent      = n_persistent,
-        n_disappeared     = n_disappeared,
-        n_colonizer       = n_colonizer,
-        pct_disappeared   = round(n_disappeared / (n_persistent + n_disappeared) * 100, 1),
-        gompertz_data     = list(df_for_gompertz)
-      )
     }) %>%
     mutate(Region = i) %>%
     relocate(Region)
@@ -700,459 +453,260 @@ ggplot(sensitivity_results,
 write.csv(all_gompertz, file = "all_gompertz.csv")
 ```
 
+#Models M0
 
-
-#big figure 
-```{r}
-
-slope_plot <- slopes_table %>%
-  mutate(site_label = paste0(destSiteID)) %>%
-  ggplot(aes(x = site_label, y = slope, 
-             color = Treatment, shape = Treatment)) +
-  geom_hline(yintercept = 1, linetype = "dashed",
-             color = "gold", linewidth = 1.2) +
-  geom_hline(yintercept = 2, linetype = "dashed",
-             color = "darkolivegreen2", linewidth = 1.2) +
-  geom_pointrange(aes(ymin = ci_low_slope, ymax = ci_high_slope),
-                  position = position_dodge(width = 0.5),
-                  size = 0.7, linewidth = 0.8) +
-  scale_color_manual(
-    values = c(
-      "warm"           = "firebrick1",
-      "Control_origin" = "dodgerblue",
-      "Control_dest"   = "orange"
-    )
-  ) +
-  scale_shape_manual(
-    values = c(
-      "warm"           = 17,
-      "Control_origin" = 16,
-      "Control_dest"   = 15
-    )
-  ) +
-  facet_wrap(~ Region, scales = "free_x", ncol = 7) +
-  labs(
-    title = "Variance scaling slopes by region, site and treatment without density dependance",
-    x = NULL,
-    y = "Slope (log_epsilon² ~ logNi)",
-    color = "Treatment",
-    shape = "Treatment"
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
-    plot.title  = element_text(face = "bold"),
-    legend.position = "bottom",
-    strip.text  = element_text(face = "bold"),
-    panel.grid.major.x = element_line(color = "grey90")
-  )
-
-slope_plot 
-
-ggsave(slope_plot, filename= "./Figures/slopes_plot_without_DD.jpeg", width =10, height = 6)
-
-
-##################### plot of slopes per treatments ###########
-
-#It is good practice to standardise your explanatory variables before proceeding, so that they have a mean of zero and standard deviation of one. It ensures that the estimated coefficients are all on the same scale, making it easier to compare effect sizes (and it improves model convergence). You can use scale() to do that. It is good practice to standardise your explanatory variables before proceeding, so that they have a mean of zero and standard deviation of one. It ensures that the estimated coefficients are all on the same scale, making it easier to compare effect sizes (and it improves model convergence). You can use scale() to do that
-
-slopes_table$mean_elevation <- scale(slopes_table$mean_elevation)
-slopes_table$mean_plot_size <- scale(slopes_table$mean_plot_size)
-slopes_table$mean_delta_years <- scale(slopes_table$mean_delta_years)
-
-model_full <- lmer(slope ~ Treatment + mean_elevation + mean_delta_years + mean_plot_size + (1| Region), data= slopes_table)
-summary(model_full)
-
-# stargazer(model_full, type = "text",
-#          digits = 3,
-#          star.cutoffs = c(0.05, 0.01, 0.001),
-#          digit.separator = "")
-
-plot(model_full)
-qqnorm(resid(model_full))
-qqline(resid(model_full))
-
-(model_full_emmeans<- emmeans(model_full, ~ Treatment))
-
-# Extract the prediction data frame
-pred.mm <- ggpredict(model_full, terms = c("Treatment"))  # this gives overall predictions for the model
-
-
-#pourquoi pred.mm c'est adjusted for? Et c'est 0? car on a scale avant donc les prédictions representent la valeur estimée de la pente pour chaque traitment quand toutes les covariables sont à leur moyennes, o, car elles ont ete scales
-
-# Plot the predictions 
-
-(ggplot(pred.mm) + 
-   geom_point(aes(x = x, y = predicted)) +          # slope
-   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
-               fill = "lightgrey", alpha = 0.5) +  # error band
-   geom_boxplot(data = slopes_table,                      # adding the raw data (scaled values)
-              aes(x = Treatment, y = slope, fill = Treatment)) + 
-   scale_fill_manual(
-    values = c(
-      "warm"           = "firebrick1",
-      "Control_origin" = "dodgerblue",
-      "Control_dest"   = "orange"
-    )
-  ) +
-   labs(x = "", y = "slope") + 
-   theme_minimal(base_size = 17)
-)
-
-
-########################################################      ELEVATION            ######################
-
-model_elevation1<- lm(slope ~mean_elevation, data= slopes_table)
-summary(model_elevation1)#effet marginal
-
-#####################################################################  YEARS ##################
-model_time <- lm(slope ~mean_delta_years, data=slopes_table) 
-summary(model_time)#pas d'effet
-
-#####################################################################  Plotsize ##################
-
-model_plotsize <- lm(slope ~mean_plot_size, data=slopes_table) 
-summary(model_plotsize)#there is an effect but weak p=0.044, R² = 0.045
-
-model_plotsize_dest <- lm(slope ~mean_plot_size, data=slopes_table %>% filter(Treatment == "Control_dest")) 
-summary(model_plotsize_dest)#no effect
-
-model_plotsize_origin <- lm(slope ~mean_plot_size, data=slopes_table %>% filter(Treatment == "Control_origin")) 
-summary(model_plotsize_origin)#pas d'effet
-
-model_plotsize_warm <- lm(slope ~mean_plot_size, data=slopes_table %>% filter(Treatment == "warm")) 
-summary(model_plotsize_warm)#noeffect
-
-#################################################################################################
-
-#slopes_table$mean_delta_temp <- scale(slopes_table$mean_delta_temp) don't need to scale : Coefficient = change in slope per 1°C increase in delta_temp "a 1°C changes the slope by XX" et j'ai que un prédicteur donc j'ai pas besoin de comaprer dans la meme unitée les effect sizes across predictors (change in slope per 1SD increase in delta temp)
-
-model_temp_warm <- lm(slope ~mean_delta_temp, data=slopes_table ) 
-summary(model_temp_warm)
-
-#plot
-
-slopes_table %>%
-  filter(Treatment == "warm")%>%
-  ggplot()+
-  geom_point(aes(x = mean_delta_temp, y = slope))+
-  labs(x= "Magnitude temperature increase", y= "slope")+
-  geom_hline(yintercept = -1, color ="gold", linewidth =1.6)+
-  geom_hline(yintercept = 0, color= "darkolivegreen2", linewidth=1.6)+
-  theme_minimal()
-
-#no significant effect of temperature magnitude on slope
-
-#####################################INTERCEPT################
-
-#It is good practice to standardise your explanatory variables before proceeding, so that they have a mean of zero and standard deviation of one. It ensures that the estimated coefficients are all on the same scale, making it easier to compare effect sizes (and it improves model convergence). You can use scale() to do that
-
-# slopes_table$Elevation <- scale(slopes_table$Elevation)
-# slopes_table$mean_plot_size <- scale(slopes_table$mean_plot_size)
-# slopes_table$mean_delta_years <- scale(slopes_table$mean_delta_years)
-
-
-model_full <- lmer(intercept ~ Treatment + mean_elevation + mean_delta_years + mean_plot_size + (1| Region), data= slopes_table)
-summary(model_full)
-
-# stargazer(model_full, type = "text",
-#          digits = 3,
-#          star.cutoffs = c(0.05, 0.01, 0.001),
-#          digit.separator = "")
-
-plot(model_full)
-qqnorm(resid(model_full))
-qqline(resid(model_full))
-
-(model_full_emmeans<- emmeans(model_full, ~ Treatment))
-
-# Extract the prediction data frame
-pred.mm <- ggpredict(model_full, terms = c("Treatment"))  # this gives overall predictions for the model
-
-# Plot the predictions 
-
-(ggplot(pred.mm) + 
-   geom_point(aes(x = x, y = predicted)) +          # slope
-   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
-               fill = "lightgrey", alpha = 0.5) +  # error band
-   geom_boxplot(data = slopes_table,                      # adding the raw data (scaled values)
-              aes(x = Treatment, y = intercept, fill = Treatment)) + 
-   scale_fill_manual(
-    values = c(
-      "warm"           = "firebrick1",
-      "Control_origin" = "dodgerblue",
-      "Control_dest"   = "orange"
-    )
-  ) +
-   labs(x = "", y = "intercept") + 
-   theme_minimal(base_size = 17)
-)
-
-
-```
-
-
-#diagnostic plots
-#new
-```{r}
-
-
-# structure des résidus vs logN 
-ggplot(all_gompertz, aes(x = logN, y = gompertz_resid)) +
-  geom_point(alpha = 0.3, size = 1) +
-  geom_smooth(method = "loess", se = FALSE, linewidth = 0.8)  +
-  labs(x = "log(Cover_initial)", y = "Résidu Gompertz epsilon",
-       title = "Structure des résidus après Gompertz") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none")
-
-#courbe plate autour de 0 = gompertz a bien retiré de la structure.
-
-# structure des résidus vs logN  par traitement
- # structure des résidus vs logN 
-ggplot(all_gompertz, aes(x = logN, y = gompertz_resid, colour = Treatment)) +
-   geom_point(alpha = 0.3, size = 1) +
-   geom_smooth(method = "loess", se = FALSE, linewidth = 0.8) +
-   scale_colour_manual(values = c(
-     "warm"                = "firebrick1",
-     "Control_origin"      = "dodgerblue",
-     "Control_dest" = "orange"
-   )) +
-   facet_wrap(~Treatment) +
-   labs(x = "log(Cover_initial)", y = "Résidu Gompertz epsilon",
-        title = "Structure des résidus après Gompertz") +
-   theme_minimal(base_size = 12) +
-   theme(legend.position = "none")
-
-
-#résidu positif pour une population petite = son taux de croissance observé est supérieur à ce que prédit la droite Gompertz à l'echelle de la communauté/site : Control_origin : croissance des petites populations plus vite qu'attendu
-
-## tendance résiduelle par traitement très faible R² vraiment bas.
-all_gompertz %>%
-  filter(dynamique_statut == "Persistent") %>%
-  group_by(Treatment) %>%
-  group_modify(~ {
-    mod <- lm(gompertz_resid ~ logN, data = .x)
-    tibble(
-      resid_slope = coef(mod)["logN"],
-      resid_p     = summary(mod)$coefficients["logN", "Pr(>|t|)"],
-      r2          = summary(mod)$r.squared
-    )
-  })
-
-#quand on regarde les pentes entre les 3: 
-
-# pente Gompertz par traitement
-gompertz_summary <- all_gompertz %>%
-  distinct(Region, Treatment, originSiteID, destSiteID,
-           gompertz_slope, gompertz_intercept)
-
-ggplot(gompertz_summary, aes(x = Treatment, y = gompertz_slope, fill = Treatment)) +
-  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
-  geom_jitter(aes(x = Treatment, y = gompertz_slope, color = Region),width = 0.15, alpha = 0.4, size = 1.5) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
-  scale_fill_manual(values = c(
-    "warm"                = "firebrick1",
-    "Control_origin"      = "dodgerblue",
-    "Control_dest" = "orange"
-  )) +
-  labs(x = NULL, y = "Pente Gompertz (densité dépendance)",
-       title = "Densité dépendance par traitement") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-#pour tous les triatments on a de la densité dependance : pareil dans les controle, l'altitude de change pas ca. mais dans le warm, il y a plus de DD. les espèces sont plus fortement regulées par leur propore abondance sous warmm. + compétition inter et intra va influencer sur la dd? 
-
-mod_gslope <- lmer(
-  gompertz_slope ~ Treatment + (1 | Region),
-  data = gompertz_summary
-)
-summary(mod_gslope)
-
-emmeans(mod_gslope, pairwise ~ Treatment)
-
-#les deux controles ne sont pas différents mais warm est très diff du control origin et aussi mais moins du controle destination. la dd est significativement plus forte en warm. 
-
-#plot avec emmeans
-#extraire eemeans:
-
-em_slope <- emmeans(mod_gslope, pairwise ~ Treatment) %>%
-  as.data.frame() %>%
-  mutate(
-    Treatment_label = case_when(
-      Treatment == "Control_origin" ~ "Control origin",
-      Treatment == "Control_dest" ~"Control destination",
-      Treatment == "warm" ~"warm"))
-  
-gompertz_summary <- gompertz_summary%>%
-  mutate(
-    Treatment_label = case_when(
-      Treatment == "Control_origin" ~ "Control origin",
-      Treatment == "Control_dest" ~"Control destination",
-      Treatment == "warm" ~"warm"))
-  
-ggplot() +
-  geom_boxplot(data = gompertz_summary, aes(x = Treatment_label, y = gompertz_slope, color = Treatment_label)) +
-  geom_jitter(data = gompertz_summary, aes(x = Treatment_label, y = gompertz_slope, fill = Region),width = 0.15, alpha = 0.4, size = 1.5) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
-  geom_pointrange(data = em_slope %>% filter(!is.na(Treatment_label)), aes(x=Treatment_label, y=emmean, ymin = lower.CL, ymax= upper.CL), fill= "black", size= 1, shape =19)+
-  
-  #annotation
-  annotate("segment", x=2, xend =3, y=-0.55, yend=-0.55, linewidth =0.5)+
-  annotate("segment", x=1, xend =3, y=-0.3, yend=-0.3, linewidth =0.5)+
-  annotate("text", x=2.5, y=-0.53, label= "***", size = 7)+
-  annotate("text", x=1.5, y=-0.28, label= "*", size = 7)+
-  
-  scale_fill_manual(values = c(
-    "warm"                = "firebrick1",
-    "Control origin"      = "dodgerblue",
-    "Control destination" = "orange"
-  )) +
-  labs(x = NULL, y = "Pente Gompertz (densité dépendance)",
-       title = "DD per traitement - points are regions") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-
-# en gros: warming significantly strengthens density dependence
-
-
-# relation pente ~ intercept par traitement ──────────
-ggplot(gompertz_summary, aes(x = gompertz_intercept, y = gompertz_slope,
-                              colour = Treatment)) +
-  geom_point(aes(x = gompertz_intercept, y = gompertz_slope), alpha = 0.4, size = 2) +
-  geom_smooth(method = "lm", se = TRUE, linewidth = 0.8) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
-  scale_colour_manual(values = c(
-    "warm"                = "firebrick1",
-    "Control_origin"      = "dodgerblue",
-    "Control_dest" = "orange"
-  )) +
-  labs(x = "Intercept Gompertz (taux de croissance)",
-       y = "Pente Gompertz (densité dépendance)",
-       title = "Relation taux de croissance ~ densité dépendance") +
-  theme_minimal(base_size = 12)
-
-
-```
-
-
-# pente rare et abondantes
+M0 : parametre démographique ~Traitement + (1/region) + (1/espèce) + elevation
+Faire dredge et garder que les variables qui restent pour passer à l’étape suivante sur lequel on rajoute les traits.
 
 ```{r}
-#quantiles d'abondance par région × traitement 
+#r
+M0_r <- lmer(r ~Treatment + (1|Region) + (1|Species) + Elevation, data=all_results, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M0_r)
+dd_select_r <- dredge(M0_r,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_r[dd_select_r$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M0_r <- get.models(dd_select_r, subset =1) [[1]] 
+best_M0_r
 
-all_gompertz_new <- all_gompertz_new %>%
-  group_by(Region, Treatment) %>%
-  mutate(
-    q10_abund = quantile(logN, 0.10, na.rm = TRUE),
-    q90_abund = quantile(logN, 0.90, na.rm = TRUE),
-    abundance_group = case_when(
-      logN >= q90_abund ~ "Abundant",
-      logN <= q10_abund ~ "Rare",
-      TRUE              ~ "Intermediate"
-    )
-  ) %>%
-  ungroup()
+#a
+M0_a <- lmer(a ~Treatment + (1|Region) + (1|Species) + Elevation, data=all_results,na.action ="na.fail", REML = F) 
+summary(M0_a)
+dd_select_a <- dredge(M0_a,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_a[dd_select_a$delta<2,]) 
+best_M0_a <- get.models(dd_select_a, subset =1) [[1]] 
+best_M0_a 
 
-plot_data <- all_gompertz_new %>%
-  filter(
-    abundance_group %in% c("Abundant", "Rare"),
-    is.finite(log_resid2),
-    is.finite(logN)
-  ) %>%
-  mutate(
-    Treatment_label = case_when(
-      Treatment == "warm"           ~ "Warm",
-      Treatment == "Control_origin" ~ "Control origin",
-      Treatment == "Control_dest"   ~ "Control destination"
-    ),
-    Treatment_label = factor(Treatment_label,
-                             levels = c("Control origin",
-                                        "Warm",
-                                        "Control destination"))
-  )
+#c
+M0_c <- lmer(c ~Treatment + (1|Region) + (1|Species) + Elevation, data=all_results, na.action ="na.fail", REML = F) 
+summary(M0_c)
+dd_select_c <- dredge(M0_c,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_c[dd_select_c$delta<2,]) 
+best_M0_c <- get.models(dd_select_c, subset =1) [[1]] 
+best_M0_c 
 
-plot_data %>%
-  count(Region, Treatment, abundance_group) %>%
-  print(n = 120)
+#epsilon
+#comme c'est un résidus, centré sur zero pour chaque traitement, donc ca bug pour region 
+M0_epsilon <- lmer(epsilon ~Treatment + (1|Species)  + Elevation, data=all_results, na.action ="na.fail", REML = F) 
+summary(M0_epsilon)
+dd_select_epsilon <- dredge(M0_epsilon,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_epsilon[dd_select_epsilon$delta<2,]) 
+best_M0_epsilon <- get.models(dd_select_epsilon, subset =1) [[1]] 
+best_M0_epsilon
 
-#plot
 
-cols <- c("Abundant" = "lightgreen",
-          "Rare"     = "lightpink")
+#all models stay the same for a, r, c but for epsilon we remove region and elevation
 
-# Fonction 
-plot_treatment <- function(treatment_label_val) {
-  
-  df <- plot_data %>%
-    filter(Treatment_label == treatment_label_val)
-  
-  ggplot(df, aes(x = logN, y = log_resid2,
-                 colour = abundance_group)) +
-    geom_point(alpha = 0.2, size = 0.8) +
-    geom_smooth(method = "lm", se = TRUE,
-                linewidth = 0.9, alpha = 0.15) +
-    scale_colour_manual(values = cols) +
-    facet_wrap(~Region, ncol = 5, scales = "free") +
-    labs(
-      colour = "Abundance group",
-      title  = paste0("Chisholm pente - ", treatment_label_val)) +
-    theme_minimal(base_size = 10) +
-    theme(
-      legend.position  = "bottom",
-      strip.text       = element_text(face = "bold", size = 8),
-      panel.grid.minor = element_blank()
-    )
-}
+#conditions vérifieée? 
+#normalité des résidus?
+par(mfrow = c(2, 2))
+qqnorm(resid(best_M0_r),       main = "r");       qqline(resid(best_M0_r))
+qqnorm(resid(best_M0_a),       main = "a");       qqline(resid(best_M0_a))
+qqnorm(resid(best_M0_c),       main = "c");       qqline(resid(best_M0_c))
+qqnorm(resid(best_M0_epsilon), main = "epsilon"); qqline(resid(best_M0_epsilon))
 
-fig_warm <- plot_treatment("Warm")
-fig_co   <- plot_treatment("Control origin")
-fig_cd   <- plot_treatment("Control destination")
-
-fig_warm
-fig_co
-fig_cd
+#homoscédasticité
+par(mfrow=c(2,2))
+plot(fitted(best_M0_r), resid(best_M0_r), main = "r")
+plot(fitted(best_M0_a), residuals(best_M0_a), main ="a")
+plot(fitted(best_M0_c), resid(best_M0_c), main = "c")
+plot(fitted(best_M0_epsilon), resid(best_M0_epsilon), main = "epsilon")
 ```
+
 
 #TRAITS
-##TRY data
+
+*new TRy request data*
+no imputation 
+
+
 ```{r}
+# -------------------------- #
+# 1. Load TNRS Correspondence Table
+# -------------------------- #
+tnrs_df <- read.csv("TNRS_Correspondance_marion.csv") %>%
+  dplyr::select(-Name_submitted, -name_species) 
+
+# -------------------------- #
+# 2. Load and Prepare Trait Matrix
+# -------------------------- #
+trait_matrix <- read_csv("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/TRY/TRY_post_TNRS_Transplant.csv") %>%
+  filter(!(is.na(Species) & is.na(Genus) & is.na(Family))) %>%
+  dplyr::select(-AccSpeciesID, -AccSpeciesName)
+
+# Identify trait columns (i.e., non-taxonomic)
+trait_cols <- setdiff(names(trait_matrix), c("Species", "Genus", "Family"))
+
+# -------------------------- #
+# 3. Add Missing Species from TNRS
+# -------------------------- #
+# Identify species present in TNRS but missing in the trait matrix
+missing_species <- tnrs_df %>%
+  filter(!Species %in% trait_matrix$Species) %>%
+  select(Species, Genus, Family)
+
+length(unique(missing_species$Species)) #195 species in TNRS that do not have trait data in TRY
+
+# Create rows with NA traits for these missing species
+missing_species_filled <- missing_species %>%
+  mutate(across(everything(), as.character)) %>%
+  bind_cols(as.data.frame(matrix(NA, nrow = nrow(missing_species), ncol = length(trait_cols))))
+
+colnames(missing_species_filled) <- c("Species", "Genus", "Family", trait_cols)
+
+# Append missing species to the trait matrix
+trait_matrix_full <- bind_rows(trait_matrix, missing_species_filled)
+
+# Save a copy of the pre-imputation matrix
+trait_matrix_pre_impute <- trait_matrix_full %>% #dim41729 (trait_matrix, missing_species_filled)
+  distinct(Species, .keep_all = TRUE) %>% #dim 39902 (39587+315)
+  filter(Species %in% tnrs_df$Species) #Only keep species that were in our TNRS. 
+
+#same as length(unique(tnrs_df$name_species))
+
+# -------------------------- #
+# 4. Impute Missing Trait Values
+# -------------------------- #
+# Rename trait columns with "trait_" prefix for clarity
+names(trait_matrix_full)[4:8] <- paste0("trait_", names(trait_matrix_full)[4:8])
+
+#(marion) find out where are the missing values
+summary(trait_matrix_full)
+
+pMiss <- function(x){sum(is.na(x))/length(x)*100}
+apply(trait_matrix_full,2,pMiss) #apply function to (2) columns (missing value per column) c'est énorme!!!
+apply(trait_matrix_full,1,pMiss) #apply function to (1) rows
+
+md.pattern(trait_matrix_full)
+colnames(trait_matrix_full) <- gsub("^trait_", "", colnames(trait_matrix_full)) #remove trait
+trait_matrix_full <- trait_matrix_full
+
+# Plot Missing data per variable & pattern
+aggr(
+  trait_matrix_full,
+  col = c("navyblue", "red"),
+  numbers = TRUE,
+  sortVars = TRUE,
+  labels = colnames(trait_matrix_full),
+  cex.axis = 0.7,
+  gap = 3,
+  combined = FALSE,
+  ylab = c("Missing values per variable", "Missing data pattern")
+)
+
+#Do the same for TNRS dataset 
+colnames(trait_matrix_pre_impute) <- gsub("^trait_", "", colnames(trait_matrix_pre_impute)) #remove trait
+trait_matrix_pre_impute <- trait_matrix_pre_impute 
+
+apply(trait_matrix_pre_impute,2,pMiss) #apply function to (2) columns (missing value per column) still suuper big!
+apply(trait_matrix_pre_impute,1,pMiss) #apply function to (1) rows
+
+# Plot Missing data per variable & pattern on TNRS dataset
+aggr(
+  trait_matrix_pre_impute,
+  col = c("navyblue", "red"),
+  numbers = TRUE,
+  sortVars = TRUE,
+  labels = colnames(trait_matrix_full),
+  cex.axis = 0.7,
+  gap = 3,
+  combined = FALSE,
+  ylab = c("Missing values per variable", "Missing data pattern")
+)
+
+
+#Back to Lula's script ---------------------------------
+
+# Impute missing values using Genus mean first, then Family mean
+trait_matrix_imputed <- trait_matrix_full %>%
+  group_by(Genus) %>%
+  mutate(across(starts_with("trait"), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) %>%
+  ungroup() %>%
+  group_by(Family) %>%
+  mutate(across(starts_with("trait"), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) %>%
+  ungroup()
+
+# -------------------------- #
+# 5. Remove Species Duplicates and Filter to Reference List
+# -------------------------- #
+trait_matrix_imputed <- trait_matrix_imputed %>%
+  distinct(Species, .keep_all = TRUE)
+
+trait_matrix_final <- trait_matrix_imputed %>%
+  filter(Species %in% tnrs_df$Species)
+
+# -------------------------- #
+# 6. Summary Table of Missing Values
+# -------------------------- #
+# Count NA values before and after imputation
+na_counts_pre <- colSums(is.na(trait_matrix_pre_impute[, 4:8]))
+na_counts_post <- colSums(is.na(trait_matrix_final[, 4:8]))
+
+# Count rows where *all* traits are NA
+n_all_na_pre <- sum(apply(trait_matrix_pre_impute[, 4:8], 1, function(x) all(is.na(x))))
+n_all_na_post <- sum(apply(trait_matrix_final[, 4:8], 1, function(x) all(is.na(x))))
+
+# Create summary table
+na_summary <- data.frame(
+  Trait = names(na_counts_pre),
+  NA_pre_imputation = as.integer(na_counts_pre),
+  NA_post_imputation = as.integer(na_counts_post)
+)
+
+# Add row for "fully empty rows"
+na_summary <- rbind(
+  na_summary,
+  data.frame(
+    Trait = "Rows with all traits missing",
+    NA_pre_imputation = n_all_na_pre,
+    NA_post_imputation = n_all_na_post
+  )
+)
+
+# Display with gt
+na_summary %>%
+  gt() %>%
+  tab_header(title = "Summary of Missing Trait Values") %>%
+  fmt_number(columns = c(NA_pre_imputation, NA_post_imputation), decimals = 0)
+
+# -------------------------- #
+# 7. Final Imputation with Column Means (Fallback)
+# -------------------------- #
+trait_matrix_final <- trait_matrix_final %>%
+  mutate(across(4:8, ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)))
+
+# -------------------------- #
+# 8. Save Outputs
+# -------------------------- #
+write.csv(trait_matrix_final, file = "new_TRY_imputed_traits_mean.csv", row.names = FALSE)
+write.csv(trait_matrix_pre_impute, file = "new_TRY_raw_traits_with_na.csv", row.names = FALSE)
+
+```
+
+
+```{r}
+
 # ------------------------------------------------------------ #
 # Trait preparation and transformation
 # ------------------------------------------------------------ #
 
 # Load imputed mean trait dataset (TRY database)
-Sp_trait_TRY <- read.csv("imputed_traits_mean.csv", sep = ",", dec = ".") %>% select(-trait_SSD_mgmm.3) #on enleve SSD car pas de sens pour des herbacées et une relation qui vient de LDMC
-Sp_trait_TRY$Species <- gsub(" ", "_", Sp_trait_TRY$Species_name)
+Sp_trait_TRY <- read.csv("new_TRY_imputed_traits_mean.csv", sep = ",", dec = ".") 
 
-#rename traits
-Sp_trait_TRY <- Sp_trait_TRY %>%
-  rename(LA =trait_Leaf_area_mm2,
-         LN = trait_Leaf_N_mgg.1,
-         LMA = trait_LMA_gm.2,
-         'Max height' = trait_Max_height_m,
-         'Seed mass' = trait_Seed_mass_mg,
-         LDMC= trait_LDMC_gg.1)
-
-Sp_trait_TRY <- Sp_trait_TRY %>% select(-LDMC) #se recoupe avec LMA intégralement
-  
 # Log-transform continuous traits to normalize distributions
 Sp_trait_TRY_trans <- Sp_trait_TRY
-Sp_trait_TRY_trans[,5] <- log10(Sp_trait_TRY_trans[,5])    # Leaf area
-Sp_trait_TRY_trans[,8] <- log10(Sp_trait_TRY_trans[,8])    # Maximum height
-Sp_trait_TRY_trans[,9] <- ifelse(Sp_trait_TRY_trans[,9] == 0, 0.0001, Sp_trait_TRY_trans[,9])  # Avoid log(0) for seed mass
-Sp_trait_TRY_trans[,9] <- log10(Sp_trait_TRY_trans[,9])
+
+Sp_trait_TRY_trans[,4] <- log10(Sp_trait_TRY_trans[,4])    # Maximum height
+Sp_trait_TRY_trans[,5] <- log10(Sp_trait_TRY_trans[,5])    # SLA
+Sp_trait_TRY_trans[,6] <- log10(Sp_trait_TRY_trans[,6])    # Leaf nitrogen
+Sp_trait_TRY_trans[,7] <- log10(Sp_trait_TRY_trans[,7])    # Leaf area
+Sp_trait_TRY_trans[,8] <- ifelse(Sp_trait_TRY_trans[,8] == 0, 0.0001, Sp_trait_TRY_trans[,8])  # Avoid log(0) for seed mass
 
 # Center and scale traits
-Sp_trait_TRY_trans[,c(5:9)] <- scale(Sp_trait_TRY_trans[,c(5:9)])
+Sp_trait_TRY_trans[,c(4:8)] <- scale(Sp_trait_TRY_trans[,c(4:8)])
 
 
 
 ```
 
-##
 
 ```{r}
 
@@ -1161,22 +715,24 @@ Sp_trait_TRY_trans[,c(5:9)] <- scale(Sp_trait_TRY_trans[,c(5:9)])
 # ------------------------------------------------------------ #
 
 # Extract unique species per treatment
-Donnees_control_origin <- all_gompertz %>% filter(Treatment == "Control_origin")
+Donnees_control_origin <- all_results %>% filter(Treatment == "Control_origin")
 List_sp_control_origin <- data.frame(Species = unique(Donnees_control_origin$Species))
 
-Donnees_control_dest <- all_gompertz %>% filter(Treatment == "Control_dest")
+Donnees_control_dest <- all_results %>% filter(Treatment == "Control_dest")
 List_sp_control_dest <- data.frame(Species = unique(Donnees_control_dest$Species))
 
-Donnees_warm <- all_gompertz %>% filter(Treatment == "warm")
+Donnees_warm <- all_results %>% filter(Treatment == "warm")
 List_sp_warm <- data.frame(Species = unique(Donnees_warm$Species))
 
 # merge species
 List_sp_global <- data.frame(Species = unique(c(List_sp_control_origin$Species, List_sp_control_dest$Species, List_sp_warm$Species)))
 
 # Merge trait data (raw and transformed) with species list
+Sp_trait_TRY$Species <- gsub(" ", "_", Sp_trait_TRY$Species)
 sp_traits <- merge(List_sp_global, Sp_trait_TRY, by = "Species", all.x = TRUE) %>%
   na.omit()
 
+Sp_trait_TRY_trans$Species <- gsub(" ", "_", Sp_trait_TRY_trans$Species)
 sp_traits_centre <- merge(List_sp_global, Sp_trait_TRY_trans, by = "Species", all.x = TRUE) %>%
   na.omit()
 
@@ -1227,7 +783,7 @@ comparaisons <- list(
 # ------------------------------------------------------------ #
 
 # Run PCA on standardized traits
-pca_result <- PCA(sp_traits_centre[,5:9], scale.unit = TRUE, graph = TRUE)
+pca_result <- PCA(sp_traits_centre[,4:8], scale.unit = TRUE, graph = TRUE)
 
 # Variance explained by each axis
 fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 100),
@@ -1415,6 +971,516 @@ ggplot(coord_plot) +
        title = "ACP: species dynamics by treatment") +
   theme_minimal(base_size = 15)
 
+```
+
+
+#Models M1
+
+```{r}
+#trait data from above
+names(Sp_trait_TRY_trans)
+head(Sp_trait_TRY_trans)
+
+#demo data
+names(all_results)
+head(all_results)
+
+#join
+demo_traits <- all_results %>%
+   ungroup() %>%
+  mutate(Treatment = relevel(factor(Treatment), ref = "Control_origin"))%>%
+  distinct(Region, Treatment, originSiteID, destSiteID,
+           Species, r, a, c, epsilon, dynamique_statut, Elevation) %>%
+  left_join(
+    Sp_trait_TRY_trans %>%
+      select(Species, Genus, Family, VH, SLA, LN, LA, SM),
+    by = "Species"
+  ) %>%
+    filter(!is.na(VH), !is.na(SLA), !is.na(LN), !is.na(LA), !is.na(SM))
+
+#parque si on ne le fait pas il y a un warning
+demo_traits_scaled <- demo_traits %>%
+  mutate(
+    VH_sc  = scale(VH),
+    SLA_sc = scale(SLA),
+    LA_sc  = scale(LA),
+    SM_sc  = scale(SM),
+    LN_sc  = scale(LN),
+    Elevation_sc = scale(Elevation)
+  )
+
+#rajouter les traits pour les modeles M1
+#r
+summary(best_M0_r)
+M1_r <- lmer(r ~Treatment + (1|Region) + (1|Species) + Elevation_sc + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=demo_traits_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+
+summary(M1_r)
+dd_select_r <- dredge(M1_r,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_r[dd_select_r$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_r <- get.models(dd_select_r, subset =1) [[1]] 
+best_M1_r #with SLA + VH 
+
+#a
+best_M0_a 
+summary(best_M0_a)
+M1_a <- lmer(a ~Treatment + (1|Region) + (1|Species) + Elevation_sc + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=demo_traits_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M1_a)
+dd_select_a <- dredge(M1_a,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_a[dd_select_a$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_a <- get.models(dd_select_a, subset =1) [[1]] 
+best_M1_a #SLA + VH
+
+#c
+best_M0_c 
+summary(best_M0_c)
+M1_c <- lmer(c ~Treatment + (1|Region) + (1|Species) + Elevation_sc + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=demo_traits_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M1_c)
+dd_select_c <- dredge(M1_c,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_c[dd_select_c$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_c <- get.models(dd_select_c, subset =1) [[1]] 
+best_M1_c 
+
+#epsilon
+best_M0_epsilon
+summary(best_M0_epsilon)
+M1_epsilon <- lmer(epsilon ~Treatment + (1|Species) + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=demo_traits_scaled, na.action ="na.fail", REML = F) #on avait enlever region et elevation
+summary(M1_epsilon)
+dd_select_epsilon <- dredge(M1_epsilon,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_epsilon[dd_select_epsilon$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_epsilon <- get.models(dd_select_epsilon, subset =1) [[1]] 
+best_M1_epsilon #LA_sc + SLA_sc + SM_sc + VH_sc 
+```
+
+#Models M2
+
+with interaction for teh remaining traits and treatment
+
+```{r}
+#rajouter les intéraction traits x treatment pour les modeles M2
+#r
+summary(best_M0_r)
+summary(best_M1_r)
+M2_r <- lmer(r ~Treatment + Elevation_sc + VH_sc * Treatment + SLA_sc * Treatment + (1|Region) + (1|Species), data=demo_traits_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M2_r)
+dd_select_r <- dredge(M2_r,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_r[dd_select_r$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_r <- get.models(dd_select_r, subset =1) [[1]] 
+best_M2_r 
+
+#a
+summary(best_M0_a)
+summary(best_M1_a)
+M2_a <- lmer(a ~Treatment + Elevation_sc + VH_sc * Treatment + SLA_sc * Treatment + (1|Region) + (1|Species), data=demo_traits_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M2_a)
+dd_select_a <- dredge(M2_a,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_a[dd_select_a$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_a <- get.models(dd_select_a, subset =1) [[1]] 
+best_M2_a 
+
+#c
+summary(best_M0_c)
+summary(best_M1_c)
+M2_c <- lmer(c ~Treatment + Elevation_sc + VH_sc * Treatment + LA_sc * Treatment + (1|Region) + (1|Species), data=demo_traits_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M2_c)
+dd_select_c <- dredge(M2_c,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_c[dd_select_c$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_c <- get.models(dd_select_c, subset =1) [[1]] 
+best_M2_c 
+
+#epsilon
+summary(best_M0_epsilon)
+summary(best_M1_epsilon)
+M2_epsilon <- lmer(epsilon ~Treatment + (1|Species) + 
+                     VH_sc*Treatment + 
+                     SLA_sc*Treatment + 
+                     LA_sc*Treatment +
+                     SM_sc*Treatment, data=demo_traits_scaled, na.action ="na.fail", REML = F) #on avait enlever region et elevation
+summary(M2_epsilon)
+dd_select_epsilon <- dredge(M2_epsilon,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_epsilon[dd_select_epsilon$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_epsilon <- get.models(dd_select_epsilon, subset =1) [[1]] 
+best_M2_epsilon  #toutes les interactions n'ont pas ete retenues: LA_sc + SLA_sc + SM_sc + Treatment + VH_sc + (1 | Species) +  SM_sc:Treatment + Treatment:VH_sc
+
+#group results
+list(
+  r= fixef(best_M2_r),
+  a= fixef(best_M2_a),
+  c = fixef(best_M2_c),
+  epsilon= fixef(best_M2_epsilon)) %>%
+  map(~ round(.x, 4)) %>%
+  map(~ as.data.frame(t(.x))) %>%
+  bind_rows(.id = "parameter")
+```
+
+#plot models - boxplots
+```{r}
+
+cols_trt <- c(
+  "Control_origin" = "dodgerblue",
+  "Control_dest"   = "orange",
+  "warm"           = "firebrick1"
+)
+
+labels_trt <- c(
+  "Control_origin" = "Control\norigin",
+  "Control_dest"   = "Control\ndest",
+  "warm"           = "Warm"
+)
+
+demo_traits_scaled <- demo_traits_scaled %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+# r — taux de croissance observé
+
+em_r <- emmeans(best_M2_r, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+pred_r_vh <- ggpredict(best_M2_r,
+                        terms = c("VH_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+pred_r_sla <- ggpredict(best_M2_r,
+                         terms = c("SLA_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+# boxplot r
+p_r_box <- ggplot() +
+  geom_boxplot(
+    data  = demo_traits_scaled %>% filter(is.finite(r)),
+    aes(x = Treatment_label, y = r, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA, width = 0.5
+  ) +
+  geom_pointrange(
+    data = em_r,
+    aes(x = Treatment_label, y = emmean,
+        ymin = asymp.LCL, ymax = asymp.UCL),
+    colour = "black", size = 0.7, linewidth = 0.9
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "r", title = "r") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position    = "none",
+        panel.grid.major.x = element_blank())
+
+# marginal r ~ VH
+p_r_vh <- ggplot(pred_r_vh,
+                 aes(x = x, y = predicted,
+                     colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "VH (scaled)", y = "r",
+       colour = NULL, fill = NULL,
+       title = "VH × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+# marginal r ~ SLA
+p_r_sla <- ggplot(pred_r_sla,
+                  aes(x = x, y = predicted,
+                      colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "SLA (scaled)", y = "r",
+       colour = NULL, fill = NULL,
+       title = "SLA × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+# a — taux intrinsèque
+
+em_a <- emmeans(best_M2_a, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+pred_a_vh <- ggpredict(best_M2_a,
+                        terms = c("VH_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+pred_a_sla <- ggpredict(best_M2_a,
+                         terms = c("SLA_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+p_a_box <- ggplot() +
+  geom_boxplot(
+    data  = demo_traits_scaled %>% filter(is.finite(a)),
+    aes(x = Treatment_label, y = a, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA, width = 0.5
+  ) +
+  geom_pointrange(
+    data = em_a,
+    aes(x = Treatment_label, y = emmean,
+         ymin = asymp.LCL, ymax = asymp.UCL),
+    colour = "black", size = 0.7, linewidth = 0.9
+  ) +
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "a", title = "a") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position    = "none",
+        panel.grid.major.x = element_blank())
+
+p_a_vh <- ggplot(pred_a_vh,
+                 aes(x = x, y = predicted,
+                     colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "VH (scaled)", y = "a",
+       colour = NULL, fill = NULL,
+       title = "VH × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+p_a_sla <- ggplot(pred_a_sla,
+                  aes(x = x, y = predicted,
+                      colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "SLA (scaled)", y = "a",
+       colour = NULL, fill = NULL,
+       title = "SLA × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+# c — densité dépendance
+em_c <- emmeans(best_M2_c, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+pred_c_vh <- ggpredict(best_M2_c,
+                        terms = c("VH_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+pred_c_la <- ggpredict(best_M2_c,
+                        terms = c("LA_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+p_c_box <- ggplot() +
+  geom_boxplot(
+    data  = demo_traits_scaled %>% filter(is.finite(c)),
+    aes(x = Treatment_label, y = c, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA, width = 0.5
+  ) +
+  geom_pointrange(
+    data = em_c,
+    aes(x = Treatment_label, y = emmean,
+         ymin = asymp.LCL, ymax = asymp.UCL),
+    colour = "black", size = 0.7, linewidth = 0.9
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "c", title = "c") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position    = "none",
+        panel.grid.major.x = element_blank())
+
+p_c_vh <- ggplot(pred_c_vh,
+                 aes(x = x, y = predicted,
+                     colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "VH (scaled)", y = "c",
+       colour = NULL, fill = NULL,
+       title = "VH × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+p_c_la <- ggplot(pred_c_la,
+                 aes(x = x, y = predicted,
+                     colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "LA (scaled)", y = "c",
+       colour = NULL, fill = NULL,
+       title = "LA × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+# epsilon — stochasticité
+
+em_eps <- emmeans(best_M2_epsilon, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+pred_eps_vh <- ggpredict(best_M2_epsilon,
+                          terms = c("VH_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+pred_eps_sm <- ggpredict(best_M2_epsilon,
+                           terms = c("SM_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+
+# Calculer min/max
+range_sla <- range(demo_traits_scaled$SLA_sc, na.rm = TRUE)
+range_la  <- range(demo_traits_scaled$LA_sc,  na.rm = TRUE)
+
+pred_eps_sla <- ggpredict(
+  best_M2_epsilon,
+  terms = paste0("SLA_sc [",
+                 paste(seq(range_sla[1], range_sla[2],
+                           length.out = 100),
+                       collapse = ", "), "]")
+) %>%
+  as.data.frame()
+
+pred_eps_la <- ggpredict(
+  best_M2_epsilon,
+  terms = paste0("LA_sc [",
+                 paste(seq(range_la[1], range_la[2],
+                           length.out = 100),
+                       collapse = ", "), "]")
+) %>%
+  as.data.frame()
+
+
+p_eps_box <- ggplot() +
+  geom_boxplot(
+    data  = demo_traits_scaled,
+    aes(x = Treatment_label, y = epsilon, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA, width = 0.5
+  ) +
+  geom_pointrange(
+    data = em_eps,
+    aes(x = Treatment_label, y = emmean,
+         ymin = asymp.LCL, ymax = asymp.UCL),
+    colour = "black", size = 0.7, linewidth = 0.9
+  ) +
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "Epsilon",
+       title = "Epsilon") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position    = "none",
+        panel.grid.major.x = element_blank())
+
+p_eps_vh <- ggplot(pred_eps_vh,
+                   aes(x = x, y = predicted,
+                       colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "VH (scaled)", y = "Epsilon",
+       colour = NULL, fill = NULL,
+       title = "VH × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+p_eps_sm <- ggplot(pred_eps_sm,
+                    aes(x = x, y = predicted,
+                        colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  labs(x = "SM (scaled)", y = "Epsilon",
+       colour = NULL, fill = NULL,
+       title = "SM × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+
+# SLA — effet principal seulement
+p_eps_sla <- ggplot(pred_eps_sla,
+                    aes(x = x, y = predicted)) +
+   geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.2, fill = "grey60") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  labs(x = "SLA (scaled)", y = "ε",
+       title = "SLA (main effect) *") +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank())
+
+# LA — effet principal seulement (marginal)
+p_eps_la <- ggplot(pred_eps_la,
+                   aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.2, fill = "grey60") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  labs(x = "LA (scaled)", y = "ε",
+       title = "LA (main effect) .") +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank())
+
+#All
+demo_treatment <- ggarrange(p_r_box, p_a_box, p_c_box, p_eps_box, common.legend = T, legend = "bottom", ncol=1)
+
+interaction_r <- ggarrange(p_r_vh, p_r_sla,  common.legend = T, legend = "none", ncol=2)
+interaction_a <- ggarrange(p_a_vh, p_a_sla,  common.legend = T, legend = "none", ncol=2)
+interaction_c <- ggarrange(p_c_vh, p_c_la,  common.legend = T, legend = "none", ncol=2)
+interaction_e <- ggarrange(p_eps_vh, p_eps_sm,p_eps_sla, p_eps_la,  common.legend = T, legend = "none", ncol=4)
+
+interaction <- ggarrange(interaction_r, interaction_a, interaction_c, interaction_e, ncol=1, legend= "none")
+
+fig_main <- ggarrange(demo_treatment, interaction, ncol=2) 
+
+ggsave("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/Transplantation Alpine/TransPlantAlpin/Figures/Demo_trait.png", fig_main, bg = "white")
 ```
 
 
@@ -3410,651 +3476,6 @@ cwv_plot <- cwv_plot %>%
 
 
 
-#Turnover
-```{r}
-# ============================================================
-# TURNOVER ANALYSIS
-# Taxonomic and functional beta diversity
-# Initial → Final composition per site × treatment
-# ============================================================
-
-
-
-#TAXONOMIC TURNOVER
-beta_temporal <- data %>%
-  group_by(Region, Treatment, originSiteID, destSiteID) %>%
-  group_modify(~ {
-    
-    # Species present at initial time
-    sp_initial <- .x %>%
-      filter(Abs_Cover_initial > 0) %>%
-      pull(Species) %>% unique()
-    
-    # Species present at final time
-    sp_final <- .x %>%
-      filter(Abs_Cover_final > 0) %>%
-      pull(Species) %>% unique()
-    
-    all_sp <- union(sp_initial, sp_final)
-    
-    if (length(all_sp) < 2) {
-      return(tibble(
-        beta_sor = NA_real_,
-        beta_sim = NA_real_,
-        beta_sne = NA_real_,
-        n_lost   = NA_integer_,
-        n_gained = NA_integer_,
-        n_shared = NA_integer_
-      ))
-    }
-    
-    # Presence matrix : 2 rows (initial, final) × n species
-    mat <- matrix(0, nrow = 2, ncol = length(all_sp),
-                  dimnames = list(c("initial", "final"), all_sp))
-    mat["initial", sp_initial] <- 1
-    mat["final",   sp_final]   <- 1
-    
-    # Taxonomic beta diversity decomposed into
-    # turnover (sim) and nestedness (sne)
-    beta <- beta.pair(mat, index.family = "sorensen")
-    
-    tibble(
-      beta_sor = as.numeric(beta$beta.sor)[1],
-      beta_sim = as.numeric(beta$beta.sim)[1],  # turnover
-      beta_sne = as.numeric(beta$beta.sne)[1],  # nestedness
-      n_lost   = as.integer(length(setdiff(sp_initial, sp_final))),
-      n_gained = as.integer(length(setdiff(sp_final,   sp_initial))),
-      n_shared = as.integer(length(intersect(sp_initial, sp_final)))
-    )
-  }) %>%
-  ungroup()
-
-# Check
-beta_temporal %>%
-  group_by(Treatment) %>%
-  summarise(
-    mean_turnover   = mean(beta_sim, na.rm = TRUE),
-    mean_nestedness = mean(beta_sne, na.rm = TRUE),
-    n = n()
-  )
-
-
-mod_tax <- lmer(beta_sor ~ Treatment + (1 | Region),
-                data = beta_all %>% filter(!is.na(beta_sim)))
-summary(mod_tax)
-emmeans(mod_tax, pairwise ~ Treatment)
-
-# Figure — Taxonomic turnover
-fig_tax1 <- ggplot(beta_all,
-                  aes(x = Treatment, y = beta_sor,
-                      fill = Treatment)) +
-  geom_boxplot(alpha = 0.6) +
-  geom_jitter(width = 0.1, alpha = 0.5, size = 3) +
-  scale_fill_manual(values = c(
-    "Control_origin"      = "dodgerblue",
-    "warm"                 = "firebrick1",
-    "Control_dest" = "orange")) +
-  labs(x = NULL, y = "Taxonomic (Sørensen)") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none")
-
-fig_tax1
-
-fig_tax2 <- ggplot(beta_all,
-                  aes(x = Treatment, y = beta_sim,
-                      fill = Treatment)) +
-  geom_boxplot(alpha = 0.6) +
-  geom_jitter(width = 0.1, alpha = 0.5, size = 3) +
-  scale_fill_manual(values = c(
-    "Control_origin"      = "dodgerblue",
-    "warm"                 = "firebrick1",
-    "Control_dest" = "orange")) +
-  labs(x = NULL, y = "Taxonomic turnover (Simpson)") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none")
-
-fig_tax2
-
-fig_tax3 <- ggplot(beta_all,
-                  aes(x = Treatment, y = beta_sne,
-                      fill = Treatment)) +
-  geom_boxplot(alpha = 0.6) +
-  geom_jitter(width = 0.1, alpha = 0.5, size = 3) +
-  scale_fill_manual(values = c(
-    "Control_origin"      = "dodgerblue",
-    "warm"                 = "firebrick1",
-    "Control_dest" = "orange")) +
-  labs(x = NULL, y = "Taxonomic nestedness (Sor -sim)") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none")
-
-fig_tax3
-
-# Combine
-
-fig_beta_tax <- fig_tax1 / fig_tax2 / fig_tax3 +
-  plot_layout(heights = c(1, 1, 1))
-fig_beta_tax
-
-#FUNCTIONAL TURNOVER 
-# Distance of lost/gained species to persistent species
-# in functional trait space (PCA-based Euclidean distances)
-
-beta_functional_weighted <- data %>%
-  group_by(Region, Treatment, originSiteID, destSiteID) %>%
-  group_modify(~ {
-    
-    # Avec abondances
-    abund_initial <- .x %>%
-      filter(Abs_Cover_initial > 0) %>%
-      select(Species, Abs_Cover_initial) %>%
-      group_by(Species) %>%
-      summarise(abund = sum(Abs_Cover_initial), .groups = "drop") %>%
-      filter(Species %in% rownames(Distance))
-    
-    abund_final <- .x %>%
-      filter(Abs_Cover_final > 0) %>%
-      select(Species, Abs_Cover_final) %>%
-      group_by(Species) %>%
-      summarise(abund = sum(Abs_Cover_final), .groups = "drop") %>%
-      filter(Species %in% rownames(Distance))
-    
-    shared_sp <- intersect(abund_initial$Species, abund_final$Species)
-    lost_sp   <- setdiff(abund_initial$Species,   abund_final$Species)
-    gained_sp <- setdiff(abund_final$Species,     abund_initial$Species)
-    
-    if (length(shared_sp) < 1) return(tibble(
-      beta_fun_lost_w   = NA_real_,
-      beta_fun_gained_w = NA_real_,
-      beta_fun_asym_w   = NA_real_
-    ))
-    
-    # Poids des espèces persistantes
-    w_shared <- abund_initial %>%
-      filter(Species %in% shared_sp) %>%
-      mutate(w = abund / sum(abund)) %>%
-      select(Species, w)
-    
-    # Distance pondérée des espèces perdues aux persistantes
-    d_lost_w <- if (length(lost_sp) >= 1) {
-      w_lost <- abund_initial %>%
-        filter(Species %in% lost_sp) %>%
-        mutate(w = abund / sum(abund))
-      
-      # Distance moyenne pondérée
-      dist_mat <- Distance[lost_sp, shared_sp, drop = FALSE]
-      sum(dist_mat * outer(w_lost$w, w_shared$w))
-    } else NA_real_
-    
-    # Distance pondérée des espèces gagnées aux persistantes
-    d_gained_w <- if (length(gained_sp) >= 1) {
-      w_gained <- abund_final %>%
-        filter(Species %in% gained_sp) %>%
-        mutate(w = abund / sum(abund))
-      
-      dist_mat <- Distance[gained_sp, shared_sp, drop = FALSE]
-      sum(dist_mat * outer(w_gained$w, w_shared$w))
-    } else NA_real_
-    
-    tibble(
-      beta_fun_lost_w   = d_lost_w,
-      beta_fun_gained_w = d_gained_w,
-      beta_fun_asym_w   = d_lost_w - d_gained_w
-    )
-  }) %>%
-  ungroup()
-
-# Comparer version pondérée vs non pondérée
-beta_comparison <- beta_functional_temporal %>%
-  left_join(beta_functional_weighted,
-            by = c("Region","Treatment","originSiteID","destSiteID"))
-
-cor.test(beta_comparison$beta_fun_lost,
-         beta_comparison$beta_fun_lost_w,
-         method = "spearman")
-
-
-
-library(patchwork)
-
-p1 <- ggplot(beta_comparison %>% filter(!is.na(beta_fun_lost)),
-             aes(x = beta_fun_lost, y = beta_fun_lost_w,
-                 colour = Treatment)) +
-  geom_point(alpha = 0.6, size = 2) +
-  geom_smooth(method = "lm", se = FALSE,
-              colour = "grey40", linewidth = 0.8) +
-  annotate("text", x = Inf, y = -Inf,
-           label = "rho = 0.81***",
-           hjust = 1.1, vjust = -0.5, size = 4) +
-  scale_colour_manual(values = c(
-    "warm"           = "firebrick1",
-    "Control_origin" = "dodgerblue",
-    "Control_dest"   = "orange"
-  )) +
-  labs(x = "Unweighted (lost)",
-       y = "Weighted (lost)",
-       title = "a) Lost species") +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "none")
-
-p2 <- ggplot(beta_comparison %>% filter(!is.na(beta_fun_gained)),
-             aes(x = beta_fun_gained, y = beta_fun_gained_w,
-                 colour = Treatment)) +
-  geom_point(alpha = 0.6, size = 2) +
-  geom_smooth(method = "lm", se = FALSE,
-              colour = "grey40", linewidth = 0.8) +
-  annotate("text", x = Inf, y = -Inf,
-           label = "rho = 0.74***",
-           hjust = 1.1, vjust = -0.5, size = 4) +
-  scale_colour_manual(values = c(
-    "warm"           = "firebrick1",
-    "Control_origin" = "dodgerblue",
-    "Control_dest"   = "orange"
-  )) +
-  labs(x = "Unweighted (gained)",
-       y = "Weighted (gained)",
-       title = "b) Gained species") +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "none")
-
-p3 <- ggplot(beta_comparison %>% filter(!is.na(beta_fun_asymmetry)),
-             aes(x = beta_fun_asymmetry, y = beta_fun_asym_w,
-                 colour = Treatment)) +
-  geom_point(alpha = 0.6, size = 2) +
-  geom_smooth(method = "lm", se = FALSE,
-              colour = "grey40", linewidth = 0.8) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
-  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
-  annotate("text", x = Inf, y = -Inf,
-           label = "rho = 0.65***",
-           hjust = 1.1, vjust = -0.5, size = 4) +
-  scale_colour_manual(values = c(
-    "warm"           = "firebrick1",
-    "Control_origin" = "dodgerblue",
-    "Control_dest"   = "orange"
-  )) +
-  labs(x = "Unweighted (asymmetry)",
-       y = "Weighted (asymmetry)",
-       title = "c) Functional asymmetry") +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "bottom")
-
-fig_robust <- p1 + p2 + p3 +
-  plot_layout(ncol = 3, guides = "collect") &
-  theme(legend.position = "bottom")
-
-fig_robust
-
-
-
-
-#Together
-
-beta_all <- beta_temporal %>%
-  left_join(beta_functional_temporal,
-            by = c("Region", "Treatment", "originSiteID", "destSiteID"))
-
-# 4b. Functional distance — lost species
-mod_lost <- lmer(beta_fun_lost ~ Treatment + (1 | Region),
-                 data = beta_all %>% filter(!is.na(beta_fun_lost)))
-summary(mod_lost)
-emmeans(mod_lost, pairwise ~ Treatment)
-
-# 4c. Functional distance — gained species
-mod_gained <- lmer(beta_fun_gained ~ Treatment + (1 | Region),
-                   data = beta_all %>% filter(!is.na(beta_fun_gained)))
-summary(mod_gained)
-emmeans(mod_gained, pairwise ~ Treatment)
-
-# 4d. Functional distance — mean (lost + gained)
-mod_fun_mean <- lmer(beta_fun_mean ~ Treatment + (1 | Region),
-                     data = beta_all %>% filter(!is.na(beta_fun_mean)))
-summary(mod_fun_mean)
-emmeans(mod_fun_mean, pairwise ~ Treatment)
-
-# 4e. Functional asymmetry (lost − gained)
-mod_asym <- lmer(beta_fun_asymmetry ~ Treatment + (1 | Region),
-                 data = beta_all %>% filter(!is.na(beta_fun_asymmetry)))
-summary(mod_asym)
-emmeans(mod_asym, pairwise ~ Treatment)
-
-###########################################
-# Joindre avec les covariables de slopes_table
-beta_covariates <- beta_all %>%
-  left_join(
-    slopes_table %>%
-      select(Region, Treatment, originSiteID, destSiteID,
-             mean_elevation, mean_delta_years,
-             mean_delta_temp, mean_plot_size),
-    by = c("Region","Treatment","originSiteID","destSiteID")
-  )
-
-# Est-ce que la magnitude du warming prédit l'asymétrie fonctionnelle ?
-mod_asym_temp <- lmer(
-  beta_fun_asymmetry ~ mean_delta_temp * Treatment +
-                       mean_plot_size +
-                       mean_delta_years +
-                       (1 | Region),
-  data = beta_covariates %>% filter(!is.na(beta_fun_asymmetry))
-)
-summary(mod_asym_temp)
-
-###############
-beta_gompertz <- beta_all %>%
-  left_join(
-    slopes_table %>%
-      select(Region, Treatment, originSiteID, destSiteID,
-             slope, intercept, gompertz_data),
-    by = c("Region","Treatment","originSiteID","destSiteID")
-  ) %>%
-  left_join(
-    gompertz_summary %>%
-      select(Region, Treatment, originSiteID, destSiteID,
-             gompertz_slope, gompertz_intercept),
-    by = c("Region","Treatment","originSiteID","destSiteID")
-  )
-
-# DD ~ asymétrie fonctionnelle × traitement
-mod_dd_asym <- lmer(
-  gompertz_slope ~ beta_fun_asymmetry * Treatment + (1 | Region),
-  data = beta_gompertz %>% filter(!is.na(beta_fun_asymmetry))
-)
-summary(mod_dd_asym)
-
-# Stochasticité ~ turnover fonctionnel
-mod_stoch_beta <- lmer(
-  slope ~ beta_fun_mean * Treatment + (1 | Region),
-  data = beta_gompertz %>% filter(!is.na(beta_fun_mean))
-)
-summary(mod_stoch_beta)
-
-
-## Fig principale — 3 panels
-library(patchwork)
-
-# Panel A — Turnover taxonomique
-p_tax <- beta_all %>%
-  mutate(Treatment_label = case_when(
-    Treatment == "warm"           ~ "Warm",
-    Treatment == "Control_origin" ~ "Control\norigin",
-    Treatment == "Control_dest"   ~ "Control\ndestination"
-  ),
-  Treatment_label = factor(Treatment_label,
-                           levels = c("Control\norigin",
-                                      "Warm",
-                                      "Control\ndestination"))) %>%
-  filter(!is.na(beta_sim)) %>%
-  ggplot(aes(x = Treatment_label, y = beta_sim,
-             fill = Treatment_label)) +
-  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
-  geom_jitter(width = 0.1, alpha = 0.4, size = 1.5) +
-  annotate("segment", x = 1, xend = 2, y = 0.55, yend = 0.55) +
-  annotate("text",    x = 1.5, y = 0.57, label = "**",  size = 5) +
-  annotate("segment", x = 1, xend = 3, y = 0.62, yend = 0.62) +
-  annotate("text",    x = 2,   y = 0.64, label = "*",   size = 5) +
-  scale_fill_manual(values = c(
-    "Control\norigin"      = "dodgerblue",
-    "Warm"                 = "firebrick1",
-    "Control\ndestination" = "orange"
-  )) +
-  labs(x = NULL, y = "Taxonomic turnover",
-       title = "a) Taxonomic") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none",
-        panel.grid.major.x = element_blank())
-
-# Panel B — Functional distance lost vs gained
-beta_long <- beta_all %>%
-  mutate(Treatment_label = case_when(
-    Treatment == "warm"           ~ "Warm",
-    Treatment == "Control_origin" ~ "Control\norigin",
-    Treatment == "Control_dest"   ~ "Control\ndestination"
-  ),
-  Treatment_label = factor(Treatment_label,
-                           levels = c("Control\norigin",
-                                      "Warm",
-                                      "Control\ndestination"))) %>%
-  select(Region, Treatment_label, beta_fun_lost, beta_fun_gained) %>%
-  pivot_longer(cols = c(beta_fun_lost, beta_fun_gained),
-               names_to = "type", values_to = "dist") %>%
-  mutate(type = ifelse(type == "beta_fun_lost",
-                       "Extinct", "Colonizing")) %>%
-  filter(!is.na(dist))
-
-p_fun <- ggplot(beta_long,
-                aes(x = Treatment_label, y = dist,
-                    fill = Treatment_label)) +
-  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
-  geom_jitter(width = 0.1, alpha = 0.3, size = 1.2) +
-  scale_fill_manual(values = c(
-    "Control\norigin"      = "dodgerblue",
-    "Warm"                 = "firebrick1",
-    "Control\ndestination" = "orange"
-  )) +
-  facet_wrap(~type) +
-  labs(x = NULL,
-       y = "Functional distance\nto persistent species",
-       title = "b) Functional distance") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none",
-        panel.grid.major.x = element_blank(),
-        strip.text = element_text(face = "bold"))
-
-# Panel C — Asymétrie
-p_asym <- beta_all %>%
-  mutate(Treatment_label = case_when(
-    Treatment == "warm"           ~ "Warm",
-    Treatment == "Control_origin" ~ "Control\norigin",
-    Treatment == "Control_dest"   ~ "Control\ndestination"
-  ),
-  Treatment_label = factor(Treatment_label,
-                           levels = c("Control\norigin",
-                                      "Warm",
-                                      "Control\ndestination"))) %>%
-  filter(!is.na(beta_fun_asymmetry)) %>%
-  ggplot(aes(x = Treatment_label, y = beta_fun_asymmetry,
-             fill = Treatment_label)) +
-  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
-  geom_jitter(width = 0.1, alpha = 0.4, size = 1.5) +
-  geom_hline(yintercept = 0, linetype = "dashed",
-             colour = "grey40", linewidth = 0.6) +
-  annotate("text", x = 0.55, y =  0.25,
-           label = "lost > gained\nhomogenization",
-           size = 2.8, colour = "grey50", hjust = 0) +
-  annotate("text", x = 0.55, y = -0.25,
-           label = "gained > lost\ndiversification",
-           size = 2.8, colour = "grey50", hjust = 0) +
-  scale_fill_manual(values = c(
-    "Control\norigin"      = "dodgerblue",
-    "Warm"                 = "firebrick1",
-    "Control\ndestination" = "orange"
-  )) +
-  labs(x = NULL,
-       y = "Functional asymmetry\n(lost − gained)",
-       title = "c) Asymmetry") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none",
-        panel.grid.major.x = element_blank())
-
-fig_beta <- p_tax + p_fun + p_asym +
-  plot_layout(widths = c(1, 2, 1))
-
-fig_beta
-ggsave(plot = fig_beta, filename = "beta_diversity_fig.png",
-       bg = "transparent", width = 12, height = 4)
-
-
-
-# ── 5. VISUALISATION ─────────────────────────────────────────
-
-# Fig B — Functional distance lost vs gained
-beta_long <- beta_all %>%
-  select(Region, Treatment_label, beta_fun_lost, beta_fun_gained) %>%
-  pivot_longer(cols = c(beta_fun_lost, beta_fun_gained),
-               names_to  = "type",
-               values_to = "dist") %>%
-  mutate(type = case_when(
-    type == "beta_fun_lost"   ~ "Extinct species",
-    type == "beta_fun_gained" ~ "Colonizing species"
-  )) %>%
-  filter(!is.na(dist))
-
-fig_fun <- ggplot(beta_long,
-                  aes(x = Treatment_label, y = dist,
-                      fill = Treatment_label)) +
-  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
-  geom_jitter(width = 0.1, alpha = 0.4, size = 1.2) +
-  scale_fill_manual(values = c(
-    "Control\norigin"      = "dodgerblue",
-    "Warm"                 = "firebrick1",
-    "Control\ndestination" = "orange"
-  )) +
-  facet_wrap(~type) +
-  labs(x = NULL,
-       y = "Functional distance to persistent species",
-       title = "b) Functional distance of extinct vs colonizing species") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position  = "none",
-        strip.text       = element_text(face = "bold"),
-        panel.grid.major.x = element_blank())
-
-# Fig C — Functional asymmetry
-fig_asym <- ggplot(beta_all %>% filter(!is.na(beta_fun_asymmetry)),
-                   aes(x = Treatment_label, y = beta_fun_asymmetry,
-                       fill = Treatment_label)) +
-  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
-  geom_jitter(width = 0.1, alpha = 0.5, size = 1.5) +
-  geom_hline(yintercept = 0, linetype = "dashed",
-             colour = "grey40") +
-  annotate("text", x = 0.6, y =  0.15,
-           label = "lost > gained\n(homogenization)",
-           size = 3, colour = "grey50", hjust = 0) +
-  annotate("text", x = 0.6, y = -0.15,
-           label = "gained > lost\n(diversification)",
-           size = 3, colour = "grey50", hjust = 0) +
-  scale_fill_manual(values = c(
-    "Control\norigin"      = "dodgerblue",
-    "Warm"                 = "firebrick1",
-    "Control\ndestination" = "orange"
-  )) +
-  labs(x = NULL,
-       y = "Functional asymmetry (lost − gained distance)",
-       title = "c) Functional asymmetry of species turnover") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position    = "none",
-        panel.grid.major.x = element_blank())
-
-# Combine
-library(patchwork)
-fig_turnover <- fig_tax / fig_fun / fig_asym +
-  plot_layout(heights = c(1, 1, 1))
-
-fig_turnover
-ggsave(plot = fig_turnover, filename = "turnover_fig.png",
-       bg = "transparent", width = 8, height = 10)
-```
-
-#Magneville
-```{r}
-# install.packages("mFD")
-library(mFD)
-
-# ── 1. Préparer la matrice traits × espèces ──────────────────
-
-# Vos traits (log-transformés et scalés)
-sp_traits_mfd <- Sp_trait_TRY_trans %>%
-  select(Species, LA, LN, LMA, `Max height`, `Seed mass`) %>%
-  distinct(Species, .keep_all = TRUE) %>%
-  filter(!is.na(LA), !is.na(LN), !is.na(LMA),
-         !is.na(`Max height`), !is.na(`Seed mass`)) %>%
-  column_to_rownames("Species")
-
-# ── 2. Décrire le type de chaque trait ───────────────────────
-
-traits_info <- data.frame(
-  trait_name = c("LA", "LN", "LMA", "Max height", "Seed mass"),
-  trait_type = c("Q", "Q", "Q", "Q", "Q"),  # Q = quantitatif continu
-  row.names   = c("LA", "LN", "LMA", "Max height", "Seed mass")
-)
-
-# ── 3. Calculer les distances fonctionnelles ─────────────────
-
-sp_dist_mfd <- mFD::funct.dist(
-  sp_tr        = sp_traits_mfd,
-  tr_cat       = traits_info,
-  metric       = "gower",       # Gower pour robustesse aux échelles
-  scale_euclid = "scale_center" # si euclidean
-)
-
-# Convertir en matrice
-Distance_mfd <- as.matrix(sp_dist_mfd)
-
-# Vérifier
-dim(Distance_mfd)
-range(Distance_mfd)  # doit être entre 0 et 1 pour Gower
-
-# Espèces communes
-common_sp <- intersect(rownames(Distance), rownames(Distance_mfd))
-cat("Espèces communes :", length(common_sp), "\n")
-
-# Corrélation entre les deux matrices de distances
-cor_dist <- cor(
-  as.vector(Distance[common_sp, common_sp]),
-  as.vector(Distance_mfd[common_sp, common_sp]),
-  method = "spearman"
-)
-cat("Corrélation Distance PCA vs Gower :", round(cor_dist, 3), "\n")
-# Remplacer Distance par Distance_mfd dans votre pipeline
-beta_functional_mfd <- data %>%
-  group_by(Region, Treatment, originSiteID, destSiteID) %>%
-  group_modify(~ {
-    
-    sp_initial <- .x %>%
-      filter(Abs_Cover_initial > 0) %>%
-      pull(Species) %>% unique() %>%
-      intersect(rownames(Distance_mfd))
-    
-    sp_final <- .x %>%
-      filter(Abs_Cover_final > 0) %>%
-      pull(Species) %>% unique() %>%
-      intersect(rownames(Distance_mfd))
-    
-    shared_sp <- intersect(sp_initial, sp_final)
-    lost_sp   <- setdiff(sp_initial, sp_final)
-    gained_sp <- setdiff(sp_final,   sp_initial)
-    
-    if (length(shared_sp) < 1) return(tibble(
-      beta_fun_lost_mfd      = NA_real_,
-      beta_fun_gained_mfd    = NA_real_,
-      beta_fun_asymmetry_mfd = NA_real_
-    ))
-    
-    d_lost <- if (length(lost_sp) >= 1)
-      mean(Distance_mfd[lost_sp, shared_sp, drop = FALSE])
-    else NA_real_
-    
-    d_gained <- if (length(gained_sp) >= 1)
-      mean(Distance_mfd[gained_sp, shared_sp, drop = FALSE])
-    else NA_real_
-    
-    tibble(
-      beta_fun_lost_mfd      = d_lost,
-      beta_fun_gained_mfd    = d_gained,
-      beta_fun_asymmetry_mfd = d_lost - d_gained
-    )
-  }) %>%
-  ungroup()
-
-# Comparer avec résultats PCA
-beta_rob <- beta_functional_temporal %>%
-  left_join(beta_functional_mfd,
-            by = c("Region","Treatment","originSiteID","destSiteID"))
-
-cor.test(beta_rob$beta_fun_lost, beta_rob$beta_fun_lost_mfd,
-         method = "spearman")
-cor.test(beta_rob$beta_fun_gained, beta_rob$beta_fun_gained_mfd,
-         method = "spearman")
-```
 
 
 #Frequence, abundance and functional distinctiveness link
