@@ -1,0 +1,1816 @@
+---
+title: "Manuscript_species_level"
+output: html_document
+date: "2026-08-27"
+editor_options: 
+  chunk_output_type: console
+---
+
+#library
+```{r}
+library(readr)
+ library(here)
+#library(tidyverse)   
+# library(readxl)
+library(ggpubr)
+library(funrar)
+ library(dplyr)
+ library(tidyr)
+# library(stringr)
+ library(ggplot2)
+ library(TNRS) #c'est une application, pas une base de données
+ library(stargazer)
+library(ggeffects)
+library(FactoMineR)
+library(factoextra)
+library(stringr)
+library(tibble)
+library(purrr)
+library(lme4)
+library(emmeans)
+library(lmerTest) #for confint
+library(betapart) #for turonver
+library(patchwork) #to combine plots
+library(MuMIn)#Lucie: conseil pour choisir les modèles. le package s'appelle multi-model inference, la fonction dredge va selectionner de manière automatique des subset models depuis le modele le plus general donné en entrée.
+library(sjPlot)
+library(jtools)#for summ function
+library(mice)
+library(VIM)
+library(gt)
+library(kableExtra)
+```
+
+#Data
+```{r}
+
+data <- read_csv("intermediate data/site_species_abs_abund.csv")
+names(data)
+
+#need to pivot in long format
+data_long <- data %>% pivot_longer(cols=-c(Region, originSiteID, destSiteID, destPlotID, Year, Treatment), names_to = "Species",values_to = "Abs_Cover")
+
+dim(data_long)
+head(data_long)
+
+data_long %>%
+  group_by(Region) %>%
+  summarise(
+    n_years = n_distinct(Year),
+    year_min= min(Year),
+    year_max= max(Year)
+  )
+
+# add variable elevation and plotSize
+metadata <- read.csv(here("intermediate data","metadata.csv"))
+
+data_long <- data_long %>% left_join(metadata %>% select(Region, destSiteID, Elevation, PlotSize)) %>%
+  relocate(PlotSize, .after= destPlotID)
+
+##add temperature
+load("./raw data/TransPlantNetwork.RData")
+climdata <- climdata %>% filter(month %in% c("6","7","8")) #average of hottest months 
+
+temperature <- climdata %>%
+  filter(year %in% sample(2007:2022)) %>%
+  group_by(gradient, elevation, year) %>%
+  filter(var == "temperature")%>%
+   mutate(elevation = ifelse(gradient == "CH_Calanda" & elevation == 2800, 2600, elevation))%>% # Correction to Calanda experiment
+  rename(Region = gradient) 
+
+CH_Calanda_temp <- temperature%>%
+  filter(Region == "CH_Calanda")%>%
+  group_by(Region, elevation, year)%>%
+  filter(year %in% sample(YearMin:YearMax))%>%
+  summarise(mean_temperature = mean(value), .groups = "drop")%>%
+  pivot_wider(names_from = year , values_from = mean_temperature)%>%
+  mutate(row_mean = rowMeans(select(., -c(1:2)), na.rm = TRUE))
+
+
+survey_years <- data_long %>%
+  group_by(Region) %>%
+  summarise(year_min = min(Year, na.rm = TRUE),
+            year_max = max(Year, na.rm = TRUE),
+            .groups = "drop")
+
+region <- unique(temperature$Region) 
+region <- region[region!="IN_Kashmir"]
+region <- region[region!="US_Arizona"]
+region <- region[region!="US_Colorado"]
+
+temp_data <- data.frame()
+
+for (i in region) {
+  
+  # get the survey year range for this region
+  yr_min <- survey_years %>% filter(Region == i) %>% pull(year_min)
+  yr_max <- survey_years %>% filter(Region == i) %>% pull(year_max)
+  
+  temp_results <- temperature%>%
+    filter(Region == i)%>%
+    filter(year >= yr_min & year <= yr_max) %>%
+    group_by(Region,elevation, year)%>%
+    summarise(mean_temperature = mean(value),.groups = "drop")%>%
+    pivot_wider(names_from = year , values_from = mean_temperature)%>%
+    mutate(temp_mean = rowMeans(select(., -c(1:2)), na.rm = TRUE))%>%
+    rename(Elevation = elevation)%>%
+    select(Region, Elevation, temp_mean) 
+  
+  temp_data<- rbind(temp_data, temp_results)
+  
+}
+
+
+site_elevation <- data_long %>%
+  distinct(Region, destSiteID, Elevation) %>%
+  left_join(temp_data)%>%
+  rename(SiteID = destSiteID)
+
+data<- data_long%>%
+  left_join(site_elevation, by = c("Region","Elevation")) 
+
+```
+
+
+#Colonisatrices & seuil
+```{r}
+
+##calculer les transitions annuelles 
+#utiliser lead() pour aller au prochain
+annual_transition <- 
+  data_long %>%
+  arrange(Region, originSiteID, destSiteID, destPlotID, Treatment, Species, Year) %>%
+  group_by(Region, originSiteID, destSiteID, destPlotID, Treatment, Species) %>% #pas avec Year sinon ca ne marche pas
+  mutate(
+    Abs_Cover_next = lead(Abs_Cover),
+    Year_next = lead(Year),
+    Delta_Years = Year_next - Year) %>%
+  filter(!is.na(Delta_Years))
+  
+
+k <- 5
+
+annual_transition <- annual_transition %>%
+  mutate(
+    dynamique_statut = case_when(
+      Abs_Cover == 0 & Abs_Cover_next > 0 ~ "Colonizer",
+      Abs_Cover > 0  & Abs_Cover_next == 0 ~ "Extinct",
+      Abs_Cover > 0  & Abs_Cover_next > 0  ~ "Persistent",
+      TRUE                                  ~ NA_character_
+    )
+  )  %>%
+  filter(!is.na(dynamique_statut))
+
+# Seuil de détectabilité par site
+annual_transition2 <- annual_transition %>%
+  group_by(Region, Treatment, originSiteID,
+           destSiteID, Year) %>%
+  mutate(
+    min_cover_nonzero   = min(Abs_Cover_next[Abs_Cover_next > 0],
+                              na.rm = TRUE),
+    detection_threshold = min_cover_nonzero / k,
+    Abs_Cover_adj       = case_when(
+      dynamique_statut == "Colonizer" ~ detection_threshold,
+      TRUE                            ~ Abs_Cover),
+    logN = log10(Abs_Cover_adj)) %>%
+  ###
+  mutate(
+    min_cover_nonzero2 =min(Abs_Cover[Abs_Cover > 0],
+                              na.rm = TRUE),
+    detection_threshold2 = min_cover_nonzero2 /k, 
+    Abs_Cover_next_adj = case_when(
+      dynamique_statut == "Extinct" ~detection_threshold2, 
+      TRUE ~Abs_Cover_next), 
+    `logN+1` = log10(Abs_Cover_next_adj))%>%
+  ungroup() %>%
+  filter(
+    dynamique_statut %in% c("Persistent", "Colonizer", "Extinct"),
+    is.finite(logN))
+
+# Calculer r par espèce 
+annual_transition3 <- annual_transition2 %>%
+  mutate(
+    r = log10(Abs_Cover_next_adj / Abs_Cover_adj)
+  ) %>%
+  filter(is.finite(r)) #removes exctinct otherwise log = -inf, non en fait
+
+# Vérif
+dim(annual_transition3)
+annual_transition3 %>%
+  count(dynamique_statut)
+
+# summary stats
+annual_transition3 %>%
+  group_by(dynamique_statut)%>%
+  summarise(
+    mean_r = mean(r),
+    sd_r= sd(r, na.rm=T),
+    n = n())
+
+
+```
+
+#Table1 -summary per region
+```{r}
+table1 <- annual_transition3 %>%
+   left_join(temp_data)%>%
+  group_by(Region) %>%
+  summarise(
+    n_sites       = n_distinct(destSiteID),
+    n_plots       = n_distinct(destPlotID),
+    n_species     = n_distinct(Species),
+    year_min      = min(Year,      na.rm = TRUE),
+    year_max      = max(Year_next, na.rm = TRUE),
+    elev_min      = min(Elevation, na.rm = TRUE),
+    elev_max      = max(Elevation, na.rm = TRUE),
+    temp_min      = min(temp_mean, na.rm = TRUE),
+    temp_max      = max(temp_mean, na.rm = TRUE),
+    .groups       = "drop"
+  ) %>%
+  mutate(
+    year_range = paste0(year_min, "–", year_max),
+    elev_range = paste0(elev_min, "–", elev_max, " m"),
+    temp_range = paste0(round(temp_min, 1), "–",
+                        round(temp_max, 1), " °C")
+  ) %>%
+  select(Region, n_sites, n_plots, n_species,
+         year_range, elev_range, temp_range)
+
+table1  %>%
+  kable(booktabs = TRUE, align = "lllllc", escape = FALSE, format = "html") %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(full_width = FALSE) %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria", font_size = 16) %>%
+  save_kable(file = "Figures/Table1.png", zoom = 10) 
+
+#elevation
+annual_transition3 %>%
+  group_by(Region) %>%
+  summarise(elev_min = min(Elevation, na.rm = TRUE),
+            elev_max = max(Elevation, na.rm = TRUE),
+            .groups  = "drop") %>%
+  ggplot(aes(y = reorder(Region, elev_max))) +
+  geom_segment(aes(x    = elev_min, xend = elev_max,
+                   yend = reorder(Region, elev_max)),
+               linewidth = 2, colour = "steelblue") +
+  geom_point(aes(x = elev_min), size = 2,
+             colour = "dodgerblue") +
+  geom_point(aes(x = elev_max), size = 2,
+             colour = "firebrick1") +
+  labs(x = "Elevation (m)", y = NULL,
+       title = "Elevation range per region") +
+  theme_minimal(base_size = 11)
+```
+
+#Table2 - species info
+```{r}
+
+annual_transition3 %>%
+  group_by(Region, destSiteID, destPlotID, Year) %>%
+  summarise(n_sp_plot = n_distinct(Species), .groups = "drop") %>%
+  group_by(Region) %>%
+  summarise(
+    mean_sp_per_plot = round(mean(n_sp_plot), 1),
+    sd_sp_per_plot   = round(sd(n_sp_plot),   1),
+    .groups          = "drop"
+  )
+
+
+#nb species per region per treatment
+annual_transition3 %>%
+  group_by(Region, Treatment) %>%
+  summarise(
+    n_species = n_distinct(Species),
+    .groups   = "drop"
+  ) %>%
+  pivot_wider(names_from  = Treatment,
+              values_from = n_species)
+
+#Dynamic status counts 
+
+table2 <- annual_transition3 %>%
+  count(Region, Treatment, dynamique_statut) %>%
+  pivot_wider(names_from  = dynamique_statut,
+              values_from = n,
+              values_fill = 0) %>%
+  mutate(Total = Persistent + Colonizer + Extinct)
+
+print(table2)
+
+# Total across all regions
+annual_transition3 %>%
+  count(dynamique_statut) %>%
+  mutate(pct = round(n / sum(n) * 100, 1))
+
+table5 <-annual_transition3 %>%
+  filter(Abs_Cover > 0) %>%
+  group_by(Species) %>%
+  summarise(
+    mean_cover = mean(Abs_Cover,   na.rm = TRUE),
+    max_cover  = max(Abs_Cover,    na.rm = TRUE),
+    n_obs      = n(),
+    regions    = paste(unique(Region), collapse = ", "),
+    .groups    = "drop"
+  ) %>%
+  arrange(desc(mean_cover))
+
+cat("Most abundant:\n")
+print(head(table5, 5))
+cat("\nLeast abundant (present species):\n")
+print(tail(table5, 5))
+
+
+#plant status
+annual_transition3 %>%
+  count(Region, dynamique_statut) %>%
+  group_by(Region) %>%
+  mutate(pct = n / sum(n) * 100) %>%
+  ungroup() %>%
+  mutate(dynamique_statut = factor(dynamique_statut,
+                                   levels = c("Colonizer",
+                                              "Persistent",
+                                              "Extinct"))) %>%
+  ggplot(aes(x = reorder(Region, pct),
+             y = pct, fill = dynamique_statut)) +
+  geom_col() +
+  scale_fill_manual(values = c(
+    "Colonizer"  = "#A8DCAB",
+    "Persistent" = "#FFC5D3",
+    "Extinct"    = "#4D0135"
+  )) +
+  coord_flip() +
+  labs(x = NULL, y = "% transitions",
+       fill = NULL,
+       title = "Dynamic status per region") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+#Gompertz par espèce
+```{r}
+# La condition var(logN) == 0 signifie :
+# "est-ce que toutes les valeurs de logN sont identiques ?"
+
+# Exemple :
+# logN = c(0.301, 0.301, 0.301, 0.301, 0.301)
+# var = 0 → lm() ne peut pas estimer une pente → NA
+
+# Pour estimer r ~ logN, il FAUT que logN varie
+# Si logN ne varie pas, on ne peut pas distinguer
+# si r change à cause de N ou d'autre chose
+
+species_gompertz <- annual_transition3 %>%
+  group_by(Region, Treatment, Species) %>%
+  group_modify(~ {
+    df <- .x
+    if (nrow(df) < 3 | var(df$logN, na.rm = TRUE) == 0) { #au moins 3 points de transition (sinon pas beaucoup de données, mais on peut changer à 5)
+      return(tibble(
+        a_sp = NA_real_,
+        c_sp = NA_real_,
+        n    = nrow(df)
+      ))
+    }
+
+    mod <- lm(r ~ logN, data = df)
+    tibble(
+      a_sp = coef(mod)["(Intercept)"],
+      c_sp = coef(mod)["logN"],
+      n    = nrow(df)
+    )
+  }) %>%
+  ungroup()
+
+
+species_gompertz %>%
+  filter(!is.na(a_sp)) %>%
+   filter(!is.na(c_sp)) %>%
+  group_by(Treatment) %>%
+  summarise(
+    n_species    = n(),
+    mean_n       = mean(n))
+
+# Combien de transitions par groupe en moyenne ?
+species_gompertz %>%
+  filter(!is.na(a_sp)) %>%
+  summarise(
+    mean_n   = mean(n),
+    median_n = median(n),
+    min_n    = min(n),
+    pct_5plus = mean(n >= 5) * 100
+  )
+
+```
+
+*Colonnes clés* :
+- r       : taux de croissance observé (varie par espèce × plot) --> maintenant r pour chaque transition annuelle. donc on a plusieurs r par espèce par traitement
+- a       : intercept Gompertz (CONSTANT par site × traitement) --> maintenant a pour chaque espèce par traitement et region
+- c       : pente Gompertz (CONSTANT par site × traitement) --> maintenant a pour chaque espèce par traitement et region
+- epsilon : résidu (varie par espèce × plot) --> comme r, plusieurs epsilon par espèce, un epsilon a chaque transition annuelle. calcul al reves en utilisant a et c et r. 
+- logN    : log(abondance initiale ajustée)
+
+#get mean r and mean epsilon per species per treatment
+```{r}
+
+r_data <- # summary stats
+annual_transition3 %>%
+  group_by(Region, Species, Treatment)%>%
+  summarise(
+    mean_r = mean(r))
+
+#epsilon
+epsilon_gompertz <- annual_transition3 %>%
+  left_join(
+    species_gompertz %>% select(Region, Treatment, Species, a_sp, c_sp),
+    by = c("Region", "Treatment", "Species")
+  ) %>%
+  filter(!is.na(a_sp)) %>%
+  mutate(epsilon = r - (a_sp + c_sp * logN)) %>% 
+  filter(is.finite(epsilon))
+
+#group per species per treatment
+epsilon_data <- epsilon_gompertz%>%
+  group_by(Region, Treatment, Species)%>%
+  summarise(
+    mean_epsilon = mean(epsilon, na.rm = TRUE)) #parce que en fait après dans les modeles on va pas pouvoir fitter, c'est très moche, car methomatiquement epsilon est centr& autour de zero, qqplot tres moche, donc on veut fitter la dispersion donc var de epsilon. et je prendre log10 car sinon trop asymétrique la distribution.
+  
+
+#combine all
+#elevation data
+elevation_data <- annual_transition3 %>%
+  group_by(Region, Treatment, Species) %>%
+  summarise(
+    mean_elevation = mean(Elevation, na.rm = TRUE),
+    .groups = "drop")
+
+demo_data <- species_gompertz %>%
+  left_join(r_data, by = c('Region', 'Treatment', 'Species'))%>%
+  left_join(epsilon_data, by = c('Region', 'Treatment', 'Species')) %>%
+  left_join(elevation_data, by = c("Region", "Treatment", "Species"))
+
+
+write.csv(demo_data, "demography_data.csv")
+
+names(demo_data)
+```
+
+#Models M0
+
+M0 : parametre démographique ~Traitement + (1/region) + (1/espèce) + elevation
+Faire dredge et garder que les variables qui restent pour passer à l’étape suivante sur lequel on rajoute les traits.
+
+```{r}
+#scale elevation
+demo_data_scaled <- demo_data %>% mutate(Elevation_sc = as.numeric(scale(mean_elevation)))
+#remove na
+demo_data_scaled_clean <- demo_data_scaled %>%
+  filter(!is.na(a_sp), !is.na(c_sp),
+         !is.na(Elevation_sc), !is.na(Treatment))
+
+demo_data_scaled_clean %>%
+  summarise(
+    n_total       = n(),
+    n_na_mean_r   = sum(is.na(mean_r)),
+    n_na_mean_eps = sum(is.na(mean_epsilon)),
+    n_na_a        = sum(is.na(a_sp)),
+    n_na_c        = sum(is.na(c_sp))
+  )
+
+#summary dela distribution des valeurs extrêmes
+summary(demo_data_scaled_clean$a_sp)
+summary(demo_data_scaled_clean$c_sp)
+
+#remove above 3 SD par ce que sinon les qqplot sont très moches, il y a une structure.
+demo_data_scaled_clean <- demo_data_scaled_clean %>%
+  mutate(
+    a_sp_z = scale(a_sp),
+    c_sp_z = scale(c_sp)
+  ) %>%
+  filter(abs(a_sp_z) < 3, abs(c_sp_z) < 3) %>%
+  dplyr::select(-a_sp_z, -c_sp_z)
+
+nrow(demo_data_scaled) - nrow(demo_data_scaled_clean) #299 removed
+
+# Relevel Treatment avec Control_Origin comme référence
+demo_data_scaled_clean <- demo_data_scaled_clean %>%
+  mutate(Treatment = relevel(factor(Treatment),
+                             ref = "Control_Origin"))
+
+levels(demo_data_scaled_clean$Treatment)
+
+#r
+M0_r <- lmer(mean_r ~Treatment + (1|Region) + (1|Species) + Elevation_sc, 
+             data=demo_data_scaled_clean, 
+             na.action ="na.fail", 
+             REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M0_r)
+dd_select_r <- dredge(M0_r,  evaluate = TRUE,  rank = "AICc", fixed    = "Treatment") #on garde tjs treatment dans le model
+nrow(dd_select_r[dd_select_r$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M0_r <- get.models(dd_select_r, subset =1) [[1]] 
+best_M0_r
+
+#a
+M0_a <- lmer(a_sp ~Treatment + (1|Region) + (1|Species) + Elevation_sc, data=demo_data_scaled_clean,na.action ="na.fail", REML = F) 
+summary(M0_a)
+dd_select_a <- dredge(M0_a,  evaluate = TRUE,  rank = "AICc",, fixed    = "Treatment")
+nrow(dd_select_a[dd_select_a$delta<2,]) 
+best_M0_a <- get.models(dd_select_a, subset =1) [[1]] 
+best_M0_a 
+
+#c
+M0_c <- lmer(c_sp ~Treatment + (1|Region) + (1|Species) + Elevation_sc, data=demo_data_scaled_clean, na.action ="na.fail", REML = F) 
+summary(M0_c)
+dd_select_c <- dredge(M0_c,  evaluate = TRUE,  rank = "AICc", fixed    = "Treatment")
+nrow(dd_select_c[dd_select_c$delta<2,]) 
+best_M0_c <- get.models(dd_select_c, subset =1) [[1]] 
+best_M0_c 
+
+#epsilon
+#demo_data_scaled_clean <-demo_data_scaled_clean %>% filter(!is.na(mean_epsilon))
+
+M0_epsilon <- lmer(mean_epsilon ~Treatment + (1|Region) + (1|Species)  + Elevation_sc, data=demo_data_scaled_clean, na.action ="na.fail", REML = F) 
+summary(M0_epsilon)
+dd_select_epsilon <- dredge(M0_epsilon,  evaluate = TRUE,  rank = "AICc", fixed    = "Treatment")
+nrow(dd_select_epsilon[dd_select_epsilon$delta<2,]) 
+best_M0_epsilon <- get.models(dd_select_epsilon, subset =1) [[1]] 
+best_M0_epsilon
+
+#conditions vérifieée? 
+#normalité des résidus?
+par(mfrow = c(2, 2))
+qqnorm(resid(best_M0_r),       main = "r");       qqline(resid(best_M0_r))
+qqnorm(resid(best_M0_a),       main = "a");       qqline(resid(best_M0_a))
+qqnorm(resid(best_M0_c),       main = "c");       qqline(resid(best_M0_c))
+qqnorm(resid(best_M0_epsilon), main = "epsilon"); qqline(resid(best_M0_epsilon))
+
+#homoscédasticité
+par(mfrow=c(2,2))
+plot(fitted(best_M0_r), resid(best_M0_r), main = "r")
+plot(fitted(best_M0_a), residuals(best_M0_a), main ="a")
+plot(fitted(best_M0_c), resid(best_M0_c), main = "c")
+plot(fitted(best_M0_epsilon), resid(best_M0_epsilon), main = "epsilon")
+
+
+
+```
+
+#Traits
+
+*new TRy request data*
+no imputation 
+
+##load trait data
+
+```{r}
+# 1. Load TNRS Correspondence Table
+# -------------------------- #
+tnrs_df <- read.csv("TNRS_Correspondance_marion.csv") %>%
+  dplyr::select(-Name_submitted, -name_species) 
+
+# 2. Load and Prepare Trait Matrix
+# -------------------------- #
+trait_matrix <- read_csv("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/TRY/TRY_post_TNRS_Transplant.csv") %>%
+  filter(!(is.na(Species) & is.na(Genus) & is.na(Family))) %>%
+  dplyr::select(-AccSpeciesID, -AccSpeciesName)
+
+# Identify trait columns (i.e., non-taxonomic)
+trait_cols <- setdiff(names(trait_matrix), c("Species", "Genus", "Family"))
+
+# 3. Add Missing Species from TNRS
+# -------------------------- #
+# Identify species present in TNRS but missing in the trait matrix
+missing_species <- tnrs_df %>%
+  filter(!Species %in% trait_matrix$Species) %>%
+  select(Species, Genus, Family)
+
+length(unique(missing_species$Species)) #195 species in TNRS that do not have trait data in TRY
+
+# Create rows with NA traits for these missing species
+missing_species_filled <- missing_species %>%
+  mutate(across(everything(), as.character)) %>%
+  bind_cols(as.data.frame(matrix(NA, nrow = nrow(missing_species), ncol = length(trait_cols))))
+
+colnames(missing_species_filled) <- c("Species", "Genus", "Family", trait_cols)
+
+# Append missing species to the trait matrix
+trait_matrix_full <- bind_rows(trait_matrix, missing_species_filled)
+
+# Save a copy of the pre-imputation matrix
+trait_matrix_pre_impute <- trait_matrix_full %>% #dim41729 (trait_matrix, missing_species_filled)
+  distinct(Species, .keep_all = TRUE) %>% #dim 39902 (39587+315)
+  filter(Species %in% tnrs_df$Species) #Only keep species that were in our TNRS. 
+
+#same as length(unique(tnrs_df$name_species))
+
+# -------------------------- #
+# 4. Impute Missing Trait Values
+# -------------------------- #
+# Rename trait columns with "trait_" prefix for clarity
+names(trait_matrix_full)[4:8] <- paste0("trait_", names(trait_matrix_full)[4:8])
+
+#(marion) find out where are the missing values
+summary(trait_matrix_full)
+
+pMiss <- function(x){sum(is.na(x))/length(x)*100}
+apply(trait_matrix_full,2,pMiss) #apply function to (2) columns (missing value per column) c'est énorme!!!
+apply(trait_matrix_full,1,pMiss) #apply function to (1) rows
+
+md.pattern(trait_matrix_full)
+colnames(trait_matrix_full) <- gsub("^trait_", "", colnames(trait_matrix_full)) #remove trait
+trait_matrix_full <- trait_matrix_full
+
+# Plot Missing data per variable & pattern
+aggr(
+  trait_matrix_full,
+  col = c("navyblue", "red"),
+  numbers = TRUE,
+  sortVars = TRUE,
+  labels = colnames(trait_matrix_full),
+  cex.axis = 0.7,
+  gap = 3,
+  combined = FALSE,
+  ylab = c("Missing values per variable", "Missing data pattern")
+)
+
+#Do the same for TNRS dataset 
+colnames(trait_matrix_pre_impute) <- gsub("^trait_", "", colnames(trait_matrix_pre_impute)) #remove trait
+trait_matrix_pre_impute <- trait_matrix_pre_impute 
+
+apply(trait_matrix_pre_impute,2,pMiss) #apply function to (2) columns (missing value per column) still suuper big!
+apply(trait_matrix_pre_impute,1,pMiss) #apply function to (1) rows
+
+# Plot Missing data per variable & pattern on TNRS dataset
+aggr(
+  trait_matrix_pre_impute,
+  col = c("navyblue", "red"),
+  numbers = TRUE,
+  sortVars = TRUE,
+  labels = colnames(trait_matrix_full),
+  cex.axis = 0.7,
+  gap = 3,
+  combined = FALSE,
+  ylab = c("Missing values per variable", "Missing data pattern")
+)
+
+
+#Back to Lula's script ---------------------------------
+
+# Impute missing values using Genus mean first, then Family mean
+trait_matrix_imputed <- trait_matrix_full %>%
+  group_by(Genus) %>%
+  mutate(across(starts_with("trait"), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) %>%
+  ungroup() %>%
+  group_by(Family) %>%
+  mutate(across(starts_with("trait"), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) %>%
+  ungroup()
+
+# -------------------------- #
+# 5. Remove Species Duplicates and Filter to Reference List
+# -------------------------- #
+trait_matrix_imputed <- trait_matrix_imputed %>%
+  distinct(Species, .keep_all = TRUE)
+
+trait_matrix_final <- trait_matrix_imputed %>%
+  filter(Species %in% tnrs_df$Species)
+
+# -------------------------- #
+# 6. Summary Table of Missing Values
+# -------------------------- #
+# Count NA values before and after imputation
+na_counts_pre <- colSums(is.na(trait_matrix_pre_impute[, 4:8]))
+na_counts_post <- colSums(is.na(trait_matrix_final[, 4:8]))
+
+# Count rows where *all* traits are NA
+n_all_na_pre <- sum(apply(trait_matrix_pre_impute[, 4:8], 1, function(x) all(is.na(x))))
+n_all_na_post <- sum(apply(trait_matrix_final[, 4:8], 1, function(x) all(is.na(x))))
+
+# Create summary table
+na_summary <- data.frame(
+  Trait = names(na_counts_pre),
+  NA_pre_imputation = as.integer(na_counts_pre),
+  NA_post_imputation = as.integer(na_counts_post)
+)
+
+# Add row for "fully empty rows"
+na_summary <- rbind(
+  na_summary,
+  data.frame(
+    Trait = "Rows with all traits missing",
+    NA_pre_imputation = n_all_na_pre,
+    NA_post_imputation = n_all_na_post
+  )
+)
+
+# Display with gt
+na_summary %>%
+  gt() %>%
+  tab_header(title = "Summary of Missing Trait Values") %>%
+  fmt_number(columns = c(NA_pre_imputation, NA_post_imputation), decimals = 0)
+
+# -------------------------- #
+# 7. Final Imputation with Column Means (Fallback)
+# -------------------------- #
+trait_matrix_final <- trait_matrix_final %>%
+  mutate(across(4:8, ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)))
+
+# -------------------------- #
+# 8. Save Outputs
+# -------------------------- #
+write.csv(trait_matrix_final, file = "new_TRY_imputed_traits_mean.csv", row.names = FALSE)
+write.csv(trait_matrix_pre_impute, file = "new_TRY_raw_traits_with_na.csv", row.names = FALSE)
+
+```
+
+## trait preparation and transformation
+```{r}
+
+# Load imputed mean trait dataset (TRY database)
+Sp_trait_TRY <- read.csv("new_TRY_imputed_traits_mean.csv", sep = ",", dec = ".") 
+
+#Sp_trait_TRY <- read.csv("new_TRY_raw_traits_with_na.csv", sep = ",", dec = ".") 
+
+
+# Log-transform continuous traits to normalize distributions
+Sp_trait_TRY_trans <- Sp_trait_TRY
+
+Sp_trait_TRY_trans[,4] <- log10(Sp_trait_TRY_trans[,4])    # Maximum height
+Sp_trait_TRY_trans[,5] <- log10(Sp_trait_TRY_trans[,5])    # SLA
+Sp_trait_TRY_trans[,6] <- log10(Sp_trait_TRY_trans[,6])    # Leaf nitrogen
+Sp_trait_TRY_trans[,7] <- log10(Sp_trait_TRY_trans[,7])    # Leaf area
+Sp_trait_TRY_trans[,8] <- ifelse(Sp_trait_TRY_trans[,8] == 0, 0.0001, Sp_trait_TRY_trans[,8])  # Avoid log(0) for seed mass
+
+# Center and scale traits
+Sp_trait_TRY_trans[,c(4:8)] <- scale(Sp_trait_TRY_trans[,c(4:8)])
+
+
+```
+
+
+##join trait x demo data
+```{r}
+#remove _ 
+ demo_data_scaled_clean$Species <- gsub("_", " ", demo_data_scaled_clean$Species)
+
+data <- demo_data_scaled_clean %>%
+  left_join(Sp_trait_TRY_trans)
+
+#parque si on ne le fait pas il y a un warning
+data_scaled <- data %>%
+  mutate(
+    VH_sc  = scale(VH),
+    SLA_sc = scale(SLA),
+    LA_sc  = scale(LA),
+    SM_sc  = scale(SM),
+    LN_sc  = scale(LN),
+    Elevation_sc = scale(mean_elevation)
+  ) %>%
+  dplyr::select(Region, Treatment, Family, Genus, Species, mean_r, a_sp, c_sp, mean_epsilon, Elevation_sc, VH_sc, SLA_sc, LA_sc, SM_sc, LN_sc)
+```
+
+##trait figure raw variation
+```{r}
+
+Sp_trait_TRY <- read.csv("new_TRY_raw_traits_with_na.csv", sep = ",", dec = ".") 
+# FIGURE 4 — Trait variation per species (raw)
+
+#remove _ 
+demo_data_scaled_clean$Species <- gsub("_", " ", demo_data_scaled_clean$Species)
+ 
+data_for_variation <- demo_data_scaled_clean %>%
+  left_join(Sp_trait_TRY)
+
+plot_trait_variation <- data_for_variation  %>%
+  group_by(Treatment)%>%
+   mutate(LA = LA / 100) %>% # mm² → cm²
+  pivot_longer(
+    cols      = c(VH, SLA, LN, LA, SM),
+    names_to  = "trait",
+    values_to = "value"
+  ) %>%
+  unique()%>%
+   arrange(Treatment, Region) %>%
+              mutate(order_graph = 1:n()) %>%
+  filter(!is.na(value)) %>%
+  mutate(trait = factor(trait,
+                        levels = c("VH", "SLA", "LN", "LA", "SM"),
+                        labels= c("VH (m)", "SLA (mm2 mg-1)", "LN (mg.g-1)", "LA (cm2)", "SM (mg)"))) %>%
+  ggplot(aes(x = reorder(Region, order_graph), y = value, fill = Treatment)) +
+  geom_boxplot(
+    outlier.shape = 16,
+    outlier.size  = 0.8,
+    outlier.alpha = 0.4,
+    width         = 0.5
+  ) +
+  scale_fill_manual(values=c("orange","dodgerblue", "firebrick1")) +
+  facet_wrap(~ trait, scales = "free", ncol = 5) +
+  labs(
+    x     = NULL,
+    y     = "Trait value (raw)",
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position  = "bottom",
+    axis.text.x      = element_blank(),
+    axis.ticks.x     = element_blank(),
+   strip.text       = element_text(face = "bold", size = 9),
+    panel.grid.minor = element_blank()
+  )+
+  coord_flip()
+
+plot_trait_variation
+
+ggsave(filename = "Trait Distribution.png", plot = plot_trait_variation, bg = "white", width = 10, height = 8, dpi = 600)
+
+data_for_variation %>%
+  mutate(LA = LA / 100)  %>%# mm² → cm²
+  summarise(
+    LA_min    = min(LA,  na.rm = TRUE),
+    LA_median = median(LA, na.rm = TRUE),
+    LA_max    = max(LA,  na.rm = TRUE),
+    LA_q95    = quantile(LA, 0.95, na.rm = TRUE)
+  )
+# Attendu : median ≈ 5-20 cm², max ≈ 300-350 cm²
+
+#high LN are for fabaceae so OK: 
+data_for_variation %>%
+     filter(LN > 45) %>%
+     select(Species, LN) %>%
+     arrange(desc(LN))
+
+
+data_for_variation%>%
+  filter(VH > 5) %>%
+  select(Species, VH) %>%
+  arrange(desc(VH)) #Humulus scandens: ne plante grimpante annuelle qui peut atteindre 6 m en s'accrochant à d'autres végétaux
+
+annual_transition3 %>%
+  filter(Species == "Humulus_scandens") %>%
+  count(Region, Treatment)
+```
+
+#Models M1
+
+```{r}
+
+#r
+summary(best_M0_r)
+M1_r <- lmer(mean_r ~Treatment + (1|Region) + (1|Species) + Elevation_sc + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=data_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M1_r)
+dd_select_r <- dredge(M1_r,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_r[dd_select_r$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_r <- get.models(dd_select_r, subset =1) [[1]] 
+best_M1_r
+
+#a
+best_M0_a 
+summary(best_M0_a)
+M1_a <- lmer(a_sp ~Treatment + (1|Region) + (1|Species) + Elevation_sc + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=data_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M1_a)
+dd_select_a <- dredge(M1_a,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_a[dd_select_a$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_a <- get.models(dd_select_a, subset =1) [[1]] 
+best_M1_a 
+
+#c
+best_M0_c 
+summary(best_M0_c)
+M1_c <- lmer(c_sp ~Treatment + (1|Region) + (1|Species) + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=data_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M1_c)
+dd_select_c <- dredge(M1_c,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_c[dd_select_c$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_c <- get.models(dd_select_c, subset =1) [[1]] 
+best_M1_c 
+
+#epsilon
+best_M0_epsilon
+summary(best_M0_epsilon)
+M1_epsilon <- lmer(mean_epsilon ~Treatment + (1|Region) + (1|Species) + VH_sc + SLA_sc + LN_sc + LA_sc + SM_sc, data=data_scaled, na.action ="na.fail", REML = F) 
+summary(M1_epsilon)
+dd_select_epsilon <- dredge(M1_epsilon,  evaluate = TRUE,  rank = "AICc", fixed    = "Treatment")
+nrow(dd_select_epsilon[dd_select_epsilon$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M1_epsilon <- get.models(dd_select_epsilon, subset =1) [[1]] 
+best_M1_epsilon
+```
+
+#Models M2
+
+with interaction for teh remaining traits and treatment
+
+```{r}
+#rajouter les intéraction traits x treatment pour les modeles M2
+#r
+summary(best_M0_r)
+summary(best_M1_r)
+M2_r <- lmer(mean_r ~Treatment + Elevation_sc  + (1|Region) + (1|Species)+
+               VH_sc * Treatment + 
+               SLA_sc * Treatment + 
+               LN_sc * Treatment, data=data_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M2_r)
+dd_select_r <- dredge(M2_r,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_r[dd_select_r$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_r <- get.models(dd_select_r, subset =1) [[1]] 
+best_M2_r 
+
+#a
+summary(best_M0_a)
+summary(best_M1_a)
+M2_a <- lmer(a_sp ~Treatment + Elevation_sc + (1|Region) + (1|Species)+
+               VH_sc * Treatment + 
+               SLA_sc * Treatment + 
+               LN_sc * Treatment + 
+               LA_sc *Treatment, data=data_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M2_a)
+dd_select_a <- dredge(M2_a,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_a[dd_select_a$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_a <- get.models(dd_select_a, subset =1) [[1]] 
+best_M2_a 
+
+#c
+summary(best_M0_c)
+summary(best_M1_c)
+M2_c <- lmer(c_sp ~Treatment + (1|Region) + (1|Species) +
+               VH_sc * Treatment + 
+               SLA_sc * Treatment, data=data_scaled, na.action ="na.fail", REML = F) #rajouter na.action et REML = F pour dredge)
+summary(M2_c)
+dd_select_c <- dredge(M2_c,  evaluate = TRUE,  rank = "AICc")
+nrow(dd_select_c[dd_select_c$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_c <- get.models(dd_select_c, subset =1) [[1]] 
+best_M2_c 
+
+#epsilon
+summary(best_M0_epsilon)
+summary(best_M1_epsilon)
+M2_epsilon <- lmer(mean_epsilon ~Treatment + (1|Species) + (1 |Region) +
+                     SLA_sc*Treatment
+                     , data=data_scaled, na.action ="na.fail", REML = F) #on avait enlever region et elevation
+summary(M2_epsilon)
+dd_select_epsilon <- dredge(M2_epsilon,  evaluate = TRUE,  rank = "AICc",  fixed    = "Treatment")
+nrow(dd_select_epsilon[dd_select_epsilon$delta<2,]) #4 modèles avec AIC avec une diff de moins de 2
+best_M2_epsilon <- get.models(dd_select_epsilon, subset =1) [[1]] 
+best_M2_epsilon 
+```
+
+
+##emmeans 
+```{r}
+labels_trt <- c(
+  "Control_Destination" = "Control\ndest",
+  "Control_Origin"      = "Control\norigin",
+  "Warm"                = "Warm"
+)
+
+#r
+summary(best_M2_r) 
+contrast_r <- emmeans(best_M2_r, pairwise ~  ~Treatment )
+
+em_r <- emmeans(best_M2_r, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+emtrends(best_M2_r, pairwise ~ Treatment, var="VH_sc" )
+emtrends(best_M2_r, pairwise ~ Treatment, var = "SLA_sc")
+emtrends(best_M2_r, pairwise ~ Treatment, var = "LN_sc")
+
+#a
+summary(best_M2_a) 
+
+contrast_a <- emmeans(best_M2_a, pairwise ~  ~Treatment )
+
+em_a <- emmeans(best_M2_a, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+#c
+summary(best_M2_c) 
+
+contrast_c <- emmeans(best_M2_c, pairwise ~  ~Treatment )
+
+em_c <- emmeans(best_M2_c, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+#epsilon
+summary(best_M2_epsilon)
+
+#emmeans(best_M2_epsilon, pairwise ~  ~Treatment )
+
+
+em_eps <- emmeans(best_M2_epsilon, ~ Treatment) %>%
+  as.data.frame() %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+```
+
+##Print summaries of best models 
+```{r}
+#trop bonne fonction tab_model, prints perfect all together model summaries
+
+tab_model(best_M2_r,
+          file   = "best_M2_r.html",
+          digits = 3,
+          show.re.var = TRUE,
+          show.icc    = TRUE,
+          title        = "M2 — Per-capita growth rate r")
+
+tab_model(best_M2_a,
+          file   = "best_M2_a.html",
+          digits = 3,
+          show.re.var = TRUE,
+          title        = "M2 — Intrinsic growth rate a")
+
+tab_model(best_M2_c,
+          file   = "best_M2_c.html",
+          digits = 3,
+          show.re.var = TRUE,
+          title        = "M2 — Density dependence c")
+
+tab_model(best_M2_epsilon,
+          file   = "best_M2_epsilon.html",
+          digits = 3,
+          show.re.var = TRUE,
+          title        = "M2 — epsilon")
+
+#tous les modèles
+tab_model(
+  best_M2_r,
+  best_M2_a,
+  best_M2_c,
+  best_M2_epsilon,
+  file         = "best_M2_all.html",
+  digits       = 3,
+  show.re.var  = TRUE,
+  show.icc     = TRUE,
+  dv.labels    = c("r", "a", "c", "epsilon"),
+  title        = "M2 models — demographic parameters"
+)
+```
+
+
+#plot models - boxplots
+
+## r - per capita growth rate
+```{r}
+cols_trt <- c(
+  "Control_Origin" = "dodgerblue",
+  "Control_Destination"   = "orange",
+  "Warm"           = "firebrick1"
+)
+
+labels_trt <- c(
+  "Control_Origin" = "Control\norigin",
+  "Control_Destination"   = "Control\ndest",
+  "Warm"           = "Warm"
+)
+
+data_scaled <- data_scaled %>%
+  mutate(Treatment_label = factor(labels_trt[Treatment],
+                                  levels = labels_trt))
+
+# r — taux de croissance observé
+
+pred_r_ln <- ggpredict(best_M2_r,
+                        terms = c("LN_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+pred_r_sla <- ggpredict(best_M2_r,
+                         terms = c("SLA_sc", "Treatment")) %>%
+  as.data.frame() %>%
+  rename(Treatment = group) %>%
+  mutate(Treatment_label = factor(labels_trt[as.character(Treatment)],
+                                  levels = labels_trt))
+
+# boxplot r
+p_r_box <- ggplot() +
+  geom_boxplot(
+    data  = data_scaled,
+    aes(x = Treatment_label, y = mean_r, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA) +
+  geom_pointrange(
+    data = em_r,
+    aes(x = Treatment_label, y = emmean,
+        ymin = lower.CL, ymax = upper.CL),
+    colour = "red", size = 0.7, linewidth = 0.9
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "r") +
+  theme_minimal(base_size = 20) +
+  
+  #annotation
+  annotate("segment", x=2, xend =3, y=0.8, yend=0.8, linewidth =0.5)+
+  annotate("text", x=2.5, y=1, label= "****", size = 7)+
+  theme(legend.position    = "bottom",
+        panel.grid.major.x = element_blank(), axis.text.x = element_blank(), legend.title = element_blank())+
+  ylim(-0.8, 1.1)
+
+p_r_box 
+
+#r ~ LN
+p_r_ln <- ggplot(pred_r_ln,
+                 aes(x = x, y = predicted,
+                     colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+   annotate("text", x=1, y= 0.4, label= "CO vs W marg" , hjust=0 )+
+  annotate("text", x=1, y= 0.3, label= "CD vs W marg" , hjust=0 )+
+  annotate("text", x=1, y= 0.2, label= "CO vs CD ns", hjust=0 )+
+  labs(x = "LN (scaled)", y = "r",
+       colour = NULL, fill = NULL,
+       title = "LN × Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+p_r_ln
+
+#r ~ SLA
+p_r_sla <- ggplot(pred_r_sla,
+                  aes(x = x, y = predicted,
+                      colour = Treatment,
+                      fill   = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+
+  annotate("text", x=-5, y= 0.4, label= "CO vs W *" , hjust=0 )+
+  annotate("text", x=-5, y= 0.3, label= "CD vs W ns" , hjust=0 )+
+  annotate("text", x=-5, y= 0.2, label= "CO vs CD ns", hjust=0 )+
+
+  labs(x      = "SLA (scaled)",
+       y      = "r",
+       colour = NULL,
+       fill   = NULL,
+       title  = "SLA × Treatment") +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position  = "none", 
+        panel.grid.minor = element_blank())
+
+p_r_sla
+
+```
+
+## a - average growth rate 
+
+```{r}
+# a — taux intrinsèque
+
+p_a_box <- ggplot() +
+  geom_boxplot(
+    data  = data_scaled,
+    aes(x = Treatment_label, y = a_sp, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA)+
+  geom_pointrange(
+    data = em_a,
+    aes(x = Treatment_label, y = emmean,
+          ymin = lower.CL, ymax = upper.CL),
+    colour = "red", size = 0.7, linewidth = 0.9
+  ) +
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "a") +
+  
+    #annotation
+  annotate("segment", x=1, xend =3, y=2.7, yend=2.7, linewidth =0.5)+
+  annotate("text", x=2.5, y=2.9, label= "marg", size = 7)+
+  annotate("segment", x=2, xend =3, y=2.2, yend=2.2, linewidth =0.5)+
+  annotate("text", x=2.5, y=2.3, label= "****", size = 7)+
+  
+  theme_minimal(base_size = 20) +
+theme(legend.position    = "bottom",
+        panel.grid.major.x = element_blank(), axis.text.x = element_blank(), legend.title = element_blank())
+
+p_a_box 
+
+```
+
+## c - density dependance
+
+```{r}
+# c — densité dépendance
+
+p_c_box <- ggplot() +
+  geom_boxplot(
+    data  = data_scaled,
+    aes(x = Treatment_label, y = c_sp, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA) +
+  geom_pointrange(
+    data = em_c,
+    aes(x = Treatment_label, y = emmean,
+          ymin = lower.CL, ymax = upper.CL),
+    colour = "red", size = 0.7, linewidth = 0.9
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  
+      #annotation
+  annotate("segment", x=1, xend =3, y=-0.35, yend=-0.35, linewidth =0.5)+
+  annotate("text", x=2.5, y=-0.3, label= "marg", size = 7)+
+
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "c") +
+  theme_minimal(base_size = 20) +
+theme(legend.position    = "bottom",
+        panel.grid.major.x = element_blank(), axis.text.x = element_blank(), legend.title = element_blank())
+
+p_c_box 
+
+```
+
+## epsilon - stochasticity
+
+```{r}
+# epsilon — stochasticité
+
+# Calculer min/max
+range_sla <- range(demo_traits_scaled$SLA_sc, na.rm = TRUE)
+range_la  <- range(demo_traits_scaled$LA_sc,  na.rm = TRUE)
+
+pred_eps_sla <- ggpredict(
+  best_M2_epsilon,
+  terms = paste0("SLA_sc [",
+                 paste(seq(range_sla[1], range_sla[2],
+                           length.out = 100),
+                       collapse = ", "), "]")
+) %>%
+  as.data.frame()
+
+pred_eps_la <- ggpredict(
+  best_M2_epsilon,
+  terms = paste0("LA_sc [",
+                 paste(seq(range_la[1], range_la[2],
+                           length.out = 100),
+                       collapse = ", "), "]")
+) %>%
+  as.data.frame()
+
+
+p_eps_box <- ggplot() +
+  geom_boxplot(
+    data  = demo_traits_scaled,
+    aes(x = Treatment_label, y = epsilon, fill = Treatment),
+    alpha = 0.35, outlier.shape = NA ) +
+  geom_pointrange(
+    data = em_eps,
+    aes(x = Treatment_label, y = emmean,
+         ymin = asymp.LCL, ymax = asymp.UCL),
+    colour = "red", size = 0.7, linewidth = 0.9
+  ) +
+  scale_fill_manual(values = cols_trt) +
+  labs(x = NULL, y = "Epsilon") +
+  theme_minimal(base_size = 20) +
+  
+    #annotation
+  annotate("segment", x=1, xend =3, y=3.7, yend=3.7, linewidth =0.5)+
+  annotate("text", x=2.5, y=3.9, label= "*", size = 7)+
+  annotate("segment", x=1, xend =2, y=2.2, yend=2.2, linewidth =0.5)+
+  annotate("text", x=1.5, y=2.5, label= "****", size = 7)+
+  theme(legend.position    = "bottom",
+        panel.grid.major.x = element_blank(), axis.text.x = element_blank(), legend.title = element_blank())
+
+p_eps_vh <- ggplot(pred_eps_vh,
+                   aes(x = x, y = predicted,
+                       colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  
+     annotate("text", x=-2, y= 1.3, label= "CO vs W ***" , hjust=0 )+
+  annotate("text", x=-2, y= 1, label= "CD vs W ns" , hjust=0 )+
+  annotate("text", x=-2, y= 0.7, label= "CO vs CD ***", hjust=0 )+
+  
+  labs(x = "VH (scaled)", y = "Epsilon",
+       colour = NULL, fill = NULL,
+       title = "VH × \n Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+p_eps_vh 
+
+p_eps_sm <- ggplot(pred_eps_sm,
+                    aes(x = x, y = predicted,
+                        colour = Treatment, fill = Treatment)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(values = cols_trt, labels = labels_trt) +
+  scale_fill_manual(values   = cols_trt, labels = labels_trt) +
+  
+   annotate("text", x=-2, y= -0.4, label= "CO vs W ns" , hjust=0 )+
+  annotate("text", x=-2, y= -0.6, label= "CD vs W ns" , hjust=0 )+
+  annotate("text", x=-2, y= -0.8, label= "CO vs CD ns", hjust=0 )+
+  
+  labs(x = "SM (scaled)", y = "Epsilon",
+       colour = NULL, fill = NULL,
+       title = "SM × \n Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank())
+p_eps_sm 
+# SLA — effet principal seulement
+p_eps_sla <- ggplot(pred_eps_sla,
+                    aes(x = x, y = predicted)) +
+   geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.2, fill = "grey60") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  labs(x = "SLA (scaled)", y = "ε",
+       title = "SLA") +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank())
+
+# LA — effet principal seulement (marginal)
+p_eps_la <- ggplot(pred_eps_la,
+                   aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.2, fill = "grey60") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "grey40") +
+  labs(x = "LA (scaled)", y = "ε",
+       title = "LA") +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank())
+
+
+```
+
+##FIGURE 1
+```{r}
+#All
+demo_treatment <- ggarrange(p_r_box, p_a_box, p_c_box, common.legend = T, legend = "bottom", ncol=1)
+
+interaction_r <- ggarrange(p_r_ln, p_r_sla,  common.legend = T, legend = "none", ncol=2)
+
+fig_main <- ggarrange(demo_treatment, interaction_r, ncol=2, widths = c(0.9, 1.5)) 
+
+ggsave("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/Transplantation Alpine/TransPlantAlpin/Figures/Demo_trait.png", fig_main, bg = "white", width =14, height = 10)
+```
+
+#PCA
+```{r}
+
+dim(data_scaled)
+names(data_scaled)
+head(data_scaled)
+
+# Run PCA on standardized traits
+pca_result <- PCA(data_scaled[11:15], scale.unit = TRUE, graph = TRUE)
+
+# Variance explained by each axis
+fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 100),
+         main = "Variance explained per axis")
+
+# Extract species coordinates in PCA space
+eig_values <- pca_result$eig
+significant_axes <- 1:ncol(pca_result$ind$coord)
+coords <- pca_result$ind$coord[, significant_axes, drop = FALSE]
+coord <- data.frame(Species = data_scaled$Species, coords)
+
+# Visualize species and trait loadings
+fviz_pca_biplot(pca_result,
+                axes = c(1, 2),
+                geom.ind = "point",
+                col.ind = "cadetblue3",
+                alpha.ind = 0.6,
+                col.var = "darkblue",
+                arrowsize = 1.2,
+                label = "var"
+) +
+  theme_minimal()
+
+
+
+pca_demo <- coord %>%
+  left_join(data_scaled, by = "Species") %>%
+  filter(!is.na(Treatment))
+
+
+pca_demo <- data.frame(
+  Species   = data_scaled$Species,
+  Region    = data_scaled$Region,
+  Treatment = data_scaled$Treatment,
+  mean_r    = data_scaled$mean_r,
+  a_sp      = data_scaled$a_sp,
+  c_sp      = data_scaled$c_sp,
+  Dim.1     = pca_result$ind$coord[, 1],
+  Dim.2     = pca_result$ind$coord[, 2]
+)
+
+var_coords <- as.data.frame(pca_result$var$coord[, 1:2])
+var_coords$varname <- rownames(var_coords)
+
+scale_factor <- max(abs(pca_demo[, c("Dim.1", "Dim.2")])) /
+                max(abs(var_coords[, c("Dim.1", "Dim.2")])) * 0.6
+
+pc1_lab <- paste0("PC1 (", round(pca_result$eig[1, 2], 1), "%)")
+pc2_lab <- paste0("PC2 (", round(pca_result$eig[2, 2], 1), "%)")
+
+#limites pour le gradient
+lim_r <- quantile(pca_demo$mean_r, c(0.02, 0.98), na.rm = TRUE)
+lim_a <- quantile(pca_demo$a_sp,   c(0.02, 0.98), na.rm = TRUE)
+lim_c <- quantile(pca_demo$c_sp,   c(0.02, 0.98), na.rm = TRUE)
+
+geom_trait_arrows <- function() {
+  list(
+    geom_segment(
+      data = var_coords,
+      aes(x = 0, y = 0,
+          xend = Dim.1 * scale_factor,
+          yend = Dim.2 * scale_factor),
+      arrow       = arrow(length = unit(0.2, "cm"), type = "closed"),
+      colour      = "black", linewidth = 0.7,
+      inherit.aes = FALSE
+    ),
+    geom_text(
+      data = var_coords,
+      aes(x     = Dim.1 * scale_factor * 1.25,
+          y     = Dim.2 * scale_factor * 1.25,
+          label = varname),
+      colour      = "black", size = 3.2, fontface = "bold",
+      inherit.aes = FALSE
+    )
+  )
+}
+
+a_r <- ggplot(pca_demo %>% filter(!is.na(mean_r)),
+                  aes(x = Dim.1, y = Dim.2, colour = mean_r)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  geom_trait_arrows() +
+  scale_colour_gradient2(
+    low      = "steelblue",
+    mid      = "white",
+    high     = "firebrick1",
+    midpoint = 0,
+    limits   = lim_r,
+    oob      = scales::squish,
+    name     = "r",
+    guide    = guide_colorbar(barwidth = 0.5, barheight = 4,
+                               title.position = "top")
+  ) +
+  labs(x = pc1_lab, y = pc2_lab, title = "a) Growth rate r") +
+  theme_minimal(base_size = 11) +
+  theme(legend.key.size  = unit(0.4, "cm"),
+        legend.text      = element_text(size = 7),
+        panel.grid.minor = element_blank())
+
+
+p_pca_a <- ggplot(pca_demo %>% filter(!is.na(a_sp)),
+                  aes(x = Dim.1, y = Dim.2, colour = a_sp)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  geom_trait_arrows() +
+  scale_colour_gradient2(
+    low      = "steelblue",
+    mid      = "white",
+    high     = "firebrick1",
+    midpoint = 0,
+    limits   = lim_a,
+    oob      = scales::squish,
+    name     = "a",
+    guide    = guide_colorbar(barwidth = 0.5, barheight = 4,
+                               title.position = "top")
+  ) +
+  labs(x = pc1_lab, y = pc2_lab, title = "b) Intrinsic rate a") +
+  theme_minimal(base_size = 11) +
+  theme(legend.key.size  = unit(0.4, "cm"),
+        legend.text      = element_text(size = 7),
+        panel.grid.minor = element_blank())
+
+
+p_pca_c <- ggplot(pca_demo %>% filter(!is.na(c_sp)),
+                  aes(x = Dim.1, y = Dim.2, colour = c_sp)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  geom_trait_arrows() +
+  scale_colour_gradient2(
+    low      = "steelblue",
+    mid      = "white",
+    high     = "firebrick1",
+    midpoint = median(pca_demo$c_sp, na.rm = TRUE),
+    limits   = lim_c,
+    oob      = scales::squish,
+    name     = "c",
+    guide    = guide_colorbar(barwidth = 0.5, barheight = 4,
+                               title.position = "top")
+  ) +
+  labs(x = pc1_lab, y = pc2_lab, title = "c) dd c") +
+  theme_minimal(base_size = 11) +
+  theme(legend.key.size  = unit(0.4, "cm"),
+        legend.text      = element_text(size = 7),
+        panel.grid.minor = element_blank())
+
+fig_pca <- p_pca_r | p_pca_a | p_pca_c
+
+fig_pca
+
+
+######################old
+# # Coordonnées des traits pour les flèches
+# var_coords <- as.data.frame(pca_result$var$coord[, 1:2])
+# var_coords$varname <- rownames(var_coords)
+# 
+
+# Limites communes pour chaque paramètre
+# lim_r   <- quantile(pca_demo$r_mean,       c(0.02, 0.98), na.rm = TRUE)
+# lim_a   <- quantile(pca_demo$a_mean,       c(0.02, 0.98), na.rm = TRUE)
+# lim_c   <- quantile(pca_demo$c_mean,       c(0.02, 0.98), na.rm = TRUE)
+# lim_eps <- quantile(pca_demo$epsilon_mean, c(0.02, 0.98), na.rm = TRUE)
+# 
+# # r 
+# 
+# p_pca_r <- ggplot() +
+#   geom_point(
+#     data = pca_demo %>% filter(!is.na(r_mean)),
+#     aes(x = Dim.1, y = Dim.2, colour = r_mean),
+#     size = 2, alpha = 0.7
+#   ) +
+#   geom_segment(
+#     data = var_coords,
+#     aes(x = 0, y = 0,
+#         xend = Dim.1*5,
+#         yend = Dim.2*5),
+#     arrow     = arrow(length = unit(0.2, "cm"), type = "closed"),
+#     colour    = "black", linewidth = 0.7,
+#     inherit.aes = FALSE
+#   ) +
+#   geom_text(
+#     data = var_coords,
+#     aes(x     = Dim.1 * 6.2 ,
+#         y     = Dim.2 * 6.2 ,
+#         label = varname),
+#     colour = "black", size = 12,
+#     inherit.aes = FALSE
+#   ) +
+#   scale_colour_gradient2(
+#     low      = "steelblue",
+#     mid      = "white",
+#     high     = "red",
+#     midpoint = mean(lim_r),
+#     limits   = lim_r,
+#     oob      = scales::squish,
+#     name     = "r"
+#   ) +
+#   labs(
+#     x     = paste0("PC1 (", round(pca_result$eig[1, 2], 1), "%)"),
+#     y     = paste0("PC2 (", round(pca_result$eig[2, 2], 1), "%)"),
+#     title = "r"
+#   ) +
+#   theme_minimal(base_size = 20) +
+#  theme(
+#   legend.position  = "right",
+#   legend.key.size  = unit(0.4, "cm"),   
+#   legend.text      = element_text(size = 16),
+#   legend.title     = element_text(size = 14),
+#   panel.grid.minor = element_blank()
+# )
+# 
+# # a
+# 
+# p_pca_a <- ggplot() +
+#   geom_point(
+#     data = pca_demo %>% filter(!is.na(a_mean)),
+#     aes(x = Dim.1, y = Dim.2, colour = a_mean),
+#     size = 2, alpha = 0.7
+#   ) +
+#   geom_segment(
+#     data = var_coords,
+#     aes(x = 0, y = 0,
+#         xend = Dim.1 * 5,
+#         yend = Dim.2 * 5),
+#     arrow       = arrow(length = unit(0.2, "cm"), type = "closed"),
+#     colour      = "black", linewidth = 0.7,
+#     inherit.aes = FALSE
+#   ) +
+#   geom_text(
+#     data = var_coords,
+#     aes(x     = Dim.1 * 5 * 1.2,
+#         y     = Dim.2 * 5 * 1.2,
+#         label = varname),
+#     colour = "black", size = 12,
+#     inherit.aes = FALSE
+#   ) +
+#   scale_colour_gradient2(
+#     low      = "steelblue",
+#     mid      = "white",
+#     high     = "firebrick1",
+#     midpoint = mean(lim_a),
+#     limits   = lim_a,
+#     oob      = scales::squish,
+#     name     = "a"
+#   ) +
+#   labs(
+#     x     = paste0("PC1 (", round(pca_result$eig[1, 2], 1), "%)"),
+#     y     = paste0("PC2 (", round(pca_result$eig[2, 2], 1), "%)"),
+#     title = "a"
+#   ) +
+#    theme_minimal(base_size = 20) +
+#   theme(
+#   legend.position  = "right",
+#   legend.key.size  = unit(0.4, "cm"),   
+#     legend.text      = element_text(size = 16),
+#   legend.title     = element_text(size = 14),
+#   panel.grid.minor = element_blank()
+# )
+# 
+# # c
+# 
+# p_pca_c <- ggplot() +
+#   geom_point(
+#     data = pca_demo %>% filter(!is.na(c_mean)),
+#     aes(x = Dim.1, y = Dim.2, colour = c_mean),
+#     size = 2, alpha = 0.7
+#   ) +
+#   geom_segment(
+#     data = var_coords,
+#     aes(x = 0, y = 0,
+#         xend = Dim.1 * 5,
+#         yend = Dim.2 * 5),
+#     arrow       = arrow(length = unit(0.2, "cm"), type = "closed"),
+#     colour      = "black", linewidth = 0.7,
+#     inherit.aes = FALSE
+#   ) +
+#   geom_text(
+#     data = var_coords,
+#     aes(x     = Dim.1 * 6.2,
+#         y     = Dim.2 * 6.2,
+#         label = varname),
+#     colour = "black", size = 12,
+#     inherit.aes = FALSE
+#   ) +
+#   scale_colour_gradient2(
+#     low      = "steelblue",
+#     mid      = "white",
+#     high     = "firebrick1",
+#     midpoint = mean(lim_c),
+#     limits   = lim_c,
+#     oob      = scales::squish,
+#     name     = "c"
+#   ) +
+#   labs(
+#     x     = paste0("PC1 (", round(pca_result$eig[1, 2], 1), "%)"),
+#     y     = paste0("PC2 (", round(pca_result$eig[2, 2], 1), "%)"),
+#     title = "c"
+#   ) +
+#   theme_minimal(base_size = 20) +
+#  theme(
+#   legend.position  = "right",
+#   legend.key.size  = unit(0.4, "cm"),  
+#    legend.text      = element_text(size = 16),
+#   legend.title     = element_text(size = 14),
+#   panel.grid.minor = element_blank()
+# )
+# 
+# # epsilon
+# 
+# p_pca_eps <- ggplot() +
+#   geom_point(
+#     data = pca_demo %>% filter(!is.na(epsilon_mean)),
+#     aes(x = Dim.1, y = Dim.2, colour = epsilon_mean),
+#     size = 1.8, alpha = 0.7
+#   ) +
+#   geom_segment(
+#     data = var_coords,
+#     aes(x = 0, y = 0,
+#         xend = Dim.1 * 5,
+#         yend = Dim.2 * 5),
+#     arrow       = arrow(length = unit(0.2, "cm"), type = "closed"),
+#     colour      = "black", linewidth = 0.7,
+#     inherit.aes = FALSE
+#   ) +
+#   geom_text(
+#     data = var_coords,
+#     aes(x     = Dim.1 * 6.2,
+#         y     = Dim.2 * 6.2,
+#         label = varname),
+#     colour = "black", size = 12,
+#     inherit.aes = FALSE
+#   ) +
+#   scale_colour_gradient2(
+#     low      = "steelblue",
+#     mid      = "white",
+#     high     = "firebrick1",
+#     midpoint = 0,
+#     limits   = lim_eps,
+#     oob      = scales::squish,
+#     name     = "epsilon"
+#   ) +
+#   labs(
+#     x     = paste0("PC1 (", round(pca_result$eig[1, 2], 1), "%)"),
+#     y     = paste0("PC2 (", round(pca_result$eig[2, 2], 1), "%)"),
+#     title = "Epsilon"
+#   ) +
+#   theme_minimal(base_size = 20) +
+#   theme(
+#   legend.position  = "right",
+#   legend.key.size  = unit(0.4, "cm"),   # taille de la barre de couleur
+#     legend.text      = element_text(size = 16),
+#   legend.title     = element_text(size = 14),
+#   panel.grid.minor = element_blank()
+# )
+# 
+# # ── Figure finale — 2 × 2 ─────────────────────────────────────
+# 
+# fig_pca <- ggarrange(p_pca_r, p_pca_a, p_pca_c, p_pca_eps, nrow=2, ncol=2, labels = c("A", "B", "C", "D"), font.label = list(face="bold", size= 30))
+# 
+# fig_pca
+
+
+# ggsave("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/Transplantation Alpine/TransPlantAlpin/Figures/PCA_demo.png", fig_pca, bg = "white", width =8, height = 6)
+# 
+# 
+# p_pca_r <- p_pca_r + facet_wrap(~Treatment)
+# p_pca_a <- p_pca_a + facet_wrap(~Treatment)
+# p_pca_c <- p_pca_c + facet_wrap(~Treatment)
+# p_pca_eps <- p_pca_eps + facet_wrap(~Treatment)
+# 
+# fig2_pca <- ggarrange(p_pca_r, p_pca_a, p_pca_c, p_pca_eps, ncol=1, labels = c("A", "B", "C", "D"), font.label = list(face="bold", size= 30))
+# 
+# ggsave("C:/Users/boisseaux/Dropbox/Mon PC (Jaboty20)/Postdoc_CEFE/Transplantation Alpine/TransPlantAlpin/Figures/PCA_demo2.png", fig2_pca, bg = "white", width =6, height =10)
+```
+
+##PCA par traitement
+```{r}
+r_warm <- ggplot(pca_demo %>% filter(!is.na(mean_r)) %>%
+                     filter(Treatment =="Warm"),
+                  aes(x = Dim.1, y = Dim.2, colour = mean_r)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  geom_trait_arrows() +
+  scale_colour_gradient2(
+    low      = "steelblue",
+    mid      = "white",
+    high     = "firebrick1",
+    midpoint = 0,
+    limits   = lim_r,
+    oob      = scales::squish,
+    name     = "r",
+    guide    = guide_colorbar(barwidth = 0.5, barheight = 4,
+                               title.position = "top")
+  ) +
+  labs(x = pc1_lab, y = pc2_lab, title = "a) Growth rate r warm") +
+  theme_minimal(base_size = 11) +
+  theme(legend.key.size  = unit(0.4, "cm"),
+        legend.text      = element_text(size = 7),
+        panel.grid.minor = element_blank())
+
+
+r_CD <- ggplot(pca_demo %>% filter(!is.na(mean_r)) %>%
+                     filter(Treatment =="Control_Destination"),
+                  aes(x = Dim.1, y = Dim.2, colour = mean_r)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  geom_trait_arrows() +
+  scale_colour_gradient2(
+    low      = "steelblue",
+    mid      = "white",
+    high     = "firebrick1",
+    midpoint = 0,
+    limits   = lim_r,
+    oob      = scales::squish,
+    name     = "r",
+    guide    = guide_colorbar(barwidth = 0.5, barheight = 4,
+                               title.position = "top")
+  ) +
+  labs(x = pc1_lab, y = pc2_lab, title = "a) Growth rate r Control_Dest") +
+  theme_minimal(base_size = 11) +
+  theme(legend.key.size  = unit(0.4, "cm"),
+        legend.text      = element_text(size = 7),
+        panel.grid.minor = element_blank())
+
+
+r_CO <- ggplot(pca_demo %>% filter(!is.na(mean_r)) %>%
+                     filter(Treatment =="Control_Origin"),
+                  aes(x = Dim.1, y = Dim.2, colour = mean_r)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  geom_trait_arrows() +
+  scale_colour_gradient2(
+    low      = "steelblue",
+    mid      = "white",
+    high     = "firebrick1",
+    midpoint = 0,
+    limits   = lim_r,
+    oob      = scales::squish,
+    name     = "r",
+    guide    = guide_colorbar(barwidth = 0.5, barheight = 4,
+                               title.position = "top")
+  ) +
+  labs(x = pc1_lab, y = pc2_lab, title = "a) Growth rate r Control_Origin") +
+  theme_minimal(base_size = 11) +
+  theme(legend.key.size  = unit(0.4, "cm"),
+        legend.text      = element_text(size = 7),
+        panel.grid.minor = element_blank())
+
+
+fig_pca_treatment <- r_CO | r_CD | r_warm
+
+fig_pca_treatment
+```
+

@@ -321,8 +321,12 @@ write.csv(genus_unique_names, "./intermediate data/unique_genus_names.csv", row.
 family_unique_names <- unique(species_corrections_final$Family) %>% sort()
 write.csv(family_unique_names, "./intermediate data/unique_family_names.csv", row.names = FALSE) #67
 
+family_unique_names <- read_csv("intermediate data/unique_family_names.csv")
+
 # Export final TNRS correspondence table
 write.csv(species_corrections_final, "./intermediate data/TNRS_Correspondance_marion.csv", row.names = FALSE)
+
+species_corrections_final <- read_csv("intermediate data/TNRS_Correspondance_marion.csv")
 
 # Apply corrections to main dataset (dat) - to load from the file RData - TransPlantNetwork
 #but before dat has for some sites just a species code, which blocks the left_join afterwards, so we take out the part of dat (dat_subset) which has speciesName written in code, we change them and assemble dat as dat_final
@@ -375,6 +379,8 @@ table(is.na(data_clean$SpeciesName))
  
 # Export data_clean clean taxonomy
 write.csv(data_clean, "./intermediate data/dat_clean_taxo.csv", row.names = FALSE)
+
+data_clean <- read_csv("intermediate data/dat_clean_taxo.csv")
 ```
 
 
@@ -535,12 +541,12 @@ warm_pairs$Region.OriginSiteID <- interaction(warm_pairs$Region, warm_pairs$orig
 warm_pairs$Region.destSiteID <- interaction(warm_pairs$Region, warm_pairs$destSiteID)
 
 warm_pairs <- warm_pairs %>%
-  select(Region.OriginSiteID, Region.destSiteID)
+  dplyr::select(Region.OriginSiteID, Region.destSiteID)
 
 # Joindre les élévations
 warm_pairs <- warm_pairs %>%
-  left_join(site_elevation_origin %>% select(Elevation_origin, Region.OriginSiteID), by = "Region.OriginSiteID") %>%
-  left_join(site_elevation_dest %>% select(Elevation_dest, Region.destSiteID), by = "Region.destSiteID") %>%
+  left_join(site_elevation_origin %>% dplyr::select(Elevation_origin, Region.OriginSiteID), by = "Region.OriginSiteID") %>%
+  left_join(site_elevation_dest %>% dplyr::select(Elevation_dest, Region.destSiteID), by = "Region.destSiteID") %>%
   arrange(Elevation_origin)  
 
 warm_pairs <- warm_pairs %>%
@@ -570,6 +576,8 @@ levels(factor(data_clean$Treatment))
 
 # Export data_clean clean taxonomy
 write.csv(data_clean, "./intermediate data/dat_clean_taxo_3treatments.csv", row.names = FALSE)
+
+data_clean <-  read_csv("intermediate data/dat_clean_taxo_3treatments.csv")
 ```
 
 [1] "Control_Destination" "Control_Origin"      "Warm"   
@@ -641,7 +649,7 @@ Keep only plots with ≥ 3 years
 #restructure data to visaully see when plots wre surveyed
 
 survey_dates <- data_clean_years_filtered %>%
-  select(Region.OriginSiteID, Region.destSiteID, destPlotID, Year) %>%
+  dplyr::select(Region.OriginSiteID, Region.destSiteID, destPlotID, Year) %>%
   distinct() %>%
   mutate(value = "surveyed") %>%
   pivot_wider(names_from = Year, values_from = value, values_fill = NA)
@@ -655,7 +663,7 @@ survey_dates <- survey_dates %>%
 
 # Extract first and last survey years 
 survey_long <- survey_dates %>%
-  select(Region.OriginSiteID, Region.destSiteID, all_of(year_columns), destPlotID) %>%
+  dplyr::select(Region.OriginSiteID, Region.destSiteID, all_of(year_columns), destPlotID) %>%
   pivot_longer(
     cols = all_of(year_columns),
     names_to = "Year",
@@ -723,6 +731,57 @@ metadata =
 write.csv(metadata, "./intermediate data/metadata.csv", row.names = FALSE)
 ```
 
+#Ultimate clean from Billur
+```{r}
+# Unresolved botanical issues -> we assign genus names
+# CN_Damxung: Stipa capillacea, Stipa capillata -> Stipa
+
+#UPDATE from TNRS tool: both are accepted
+
+# CN_Damxung: Polygonaceae -> drives the pattern too much and all of a sudden disappears to be taken out. 
+# DE_Susalps (GW-FE): Festuca pratensis (in destination control plots)? Elymus repens (in origin control plots)? -> drives the pattern too much and all of a sudden disappears to be taken out.
+# DE_Susalps (GW-BT): Festuca pratensis (in destination control plots)? Elymus repens (in origin control plots)? -> drives the pattern too much and all of a sudden disappears to be taken out.
+
+data_cover2 <-  data_clean_filtered%>%
+  #mutate(SpeciesName = ifelse(Region == "CN_Damxung" & SpeciesName %in% c("Stipa capillacea","Stipa capillata"), "Stipa", SpeciesName))%>%
+  mutate(Rel_Cover = ifelse(Region == "CN_Damxung" & SpeciesName == "Polygonaceae", 0,Rel_Cover))%>%
+  mutate(Rel_Cover = ifelse(Region == "DE_Susalps" & originSiteID == "FE" & destSiteID == "FE" &  SpeciesName == "Festuca pratensis", 0, Rel_Cover))%>%
+  mutate(Rel_Cover = ifelse(Region == "DE_Susalps" & originSiteID == "BT" & destSiteID == "BT" & SpeciesName == "Festuca pratensis", 0, Rel_Cover))%>%
+  mutate(Rel_Cover = ifelse(Region == "DE_Susalps" & originSiteID == "GW" & destSiteID == "GW" & SpeciesName == "Elymus repens", 0, Rel_Cover))%>%
+  filter(Rel_Cover != 0)
+
+# I take out species that occurred in communities only once over the whole experimental duration.
+## This is because we cannot distinguish if there is an botanical identification error or true presence.
+### However, I do not change the relative cover as the species contributed to the total cover. 
+data_cover3 <- data_cover2 %>%
+  group_by(Region, originSiteID, destSiteID, Treatment, SpeciesName) %>%
+  mutate(n_occ = n()) %>%
+  filter(n_occ > 1) %>%
+  ungroup() %>%
+  dplyr::select(-n_occ) #removing 106 of DE_Susalps
+
+
+# save outputs
+write.csv(data_cover3, "data_cover3.csv", row.names = FALSE)
+
+data_cover3 <- read_csv("data_cover3.csv")
+
+# Nest the data per experiment
+dfx = data_cover3 %>%
+  dplyr::select(Region, originSiteID, destSiteID, Treatment) %>% 
+  distinct() %>% 
+  filter(Treatment == "Warm") %>% 
+  dplyr::select(-Treatment) %>%
+  mutate(comm = pmap(.l = list(R = Region, O = originSiteID, D = destSiteID), .f = function(R, O, D){
+    bind_rows(
+      originControls = data_cover2 %>% filter(Region == R & originSiteID == O & destSiteID == O & Treatment == "LocalControl"),
+      destControls = data_cover2%>% filter(Region == R &  originSiteID == D & destSiteID == D & Treatment == "LocalControl"),
+      warmed =  data_cover2 %>% filter(Region == R & originSiteID == O & destSiteID == D & Treatment == "Warm"),
+      .id = "ODT")
+  })) 
+
+
+```
 
 #Absolute and Relative Cover matrices
 
@@ -732,8 +791,8 @@ Cover matrices for each year
 ## Re-calculate the relative cover as in BIllur's github : https://github.com/billurbektas/TransPlant_convergence_analysis/blob/main/R/02_organize.R
 #This means that Cover in dat is the absolute cover. Total_Cover = somme de toutes les Cover dans le plot (toutes les espèces). Rel_Cover = fraction du cover totale occupée par cette ligne (ici ligne devient l'espèce) dans le plot. Donc Rel_Cover = abondance relative de l’espèce dans le plot.
 
-data_cover <- data_clean_filtered %>%  
-  select(-Elevation)%>%
+data_cover <- data_cover3 %>%  
+  dplyr::select(-Elevation)%>%
   group_by(Region, Year, originSiteID, originBlockID, destSiteID, destBlockID, destPlotID, Treatment, turfID, UniqueID)%>%
   mutate(Total_Cover = sum(Cover, na.rm = TRUE), Rel_Cover = Cover/Total_Cover)%>%
   ungroup() %>%
@@ -758,62 +817,13 @@ data_cover <- data_cover%>%
 
 ```
 
-#Ultimate clean from Billur
-```{r}
-# Unresolved botanical issues -> we assign genus names
-# CN_Damxung: Stipa capillacea, Stipa capillata -> Stipa
-
-#UPDATE from TNRS tool: both are accepted
-
-# CN_Damxung: Polygonaceae -> drives the pattern too much and all of a sudden disappears to be taken out. 
-# DE_Susalps (GW-FE): Festuca pratensis (in destination control plots)? Elymus repens (in origin control plots)? -> drives the pattern too much and all of a sudden disappears to be taken out.
-# DE_Susalps (GW-BT): Festuca pratensis (in destination control plots)? Elymus repens (in origin control plots)? -> drives the pattern too much and all of a sudden disappears to be taken out.
-
-data_cover2 <- data_cover%>%
-  #mutate(SpeciesName = ifelse(Region == "CN_Damxung" & SpeciesName %in% c("Stipa capillacea","Stipa capillata"), "Stipa", SpeciesName))%>%
-  mutate(Rel_Cover = ifelse(Region == "CN_Damxung" & SpeciesName == "Polygonaceae", 0,Rel_Cover))%>%
-  mutate(Rel_Cover = ifelse(Region == "DE_Susalps" & originSiteID == "FE" & destSiteID == "FE" &  SpeciesName == "Festuca pratensis", 0, Rel_Cover))%>%
-  mutate(Rel_Cover = ifelse(Region == "DE_Susalps" & originSiteID == "BT" & destSiteID == "BT" & SpeciesName == "Festuca pratensis", 0, Rel_Cover))%>%
-  mutate(Rel_Cover = ifelse(Region == "DE_Susalps" & originSiteID == "GW" & destSiteID == "GW" & SpeciesName == "Elymus repens", 0, Rel_Cover))%>%
-  filter(Rel_Cover != 0)
-
-# I take out species that occurred in communities only once over the whole experimental duration.
-## This is because we cannot distinguish if there is an botanical identification error or true presence.
-### However, I do not change the relative cover as the species contributed to the total cover. 
-data_cover3 <- data_cover2 %>%
-  group_by(Region, originSiteID, destSiteID, Treatment, SpeciesName) %>%
-  mutate(n_occ = n()) %>%
-  filter(n_occ > 1) %>%
-  ungroup() %>%
-  select(-n_occ) #removing 106 of DE_Susalps
-
-
-# save outputs
-write.csv(data_cover3, "data_cover.csv", row.names = FALSE)
-
-# Nest the data per experiment
-dfx = data_cover3 %>%
-  dplyr::select(Region, originSiteID, destSiteID, Treatment) %>% 
-  distinct() %>% 
-  filter(Treatment == "Warm") %>% 
-  dplyr::select(-Treatment) %>%
-  mutate(comm = pmap(.l = list(R = Region, O = originSiteID, D = destSiteID), .f = function(R, O, D){
-    bind_rows(
-      originControls = data_cover2 %>% filter(Region == R & originSiteID == O & destSiteID == O & Treatment == "LocalControl"),
-      destControls = data_cover2%>% filter(Region == R &  originSiteID == D & destSiteID == D & Treatment == "LocalControl"),
-      warmed =  data_cover2 %>% filter(Region == R & originSiteID == O & destSiteID == D & Treatment == "Warm"),
-      .id = "ODT")
-  })) 
-
-
-```
 
 #species-site matrix
 ```{r}
 
 #relative abundance 
 
-site_species <- data_cover3 %>%
+site_species <- data_cover %>%
   group_by(Region, originSiteID, destSiteID, destPlotID, Year, Treatment, SpeciesName) %>%
   summarise(Rel_Cover = sum(Rel_Cover, na.rm = TRUE), .groups = "drop")
 
@@ -965,23 +975,27 @@ site_species_CD_end <- bind_cols(
 
 
 # Remove 0/0 cases (species absent both times)
-# Replace 0 with small value if species appears later (to enable log calculations)
-site_species_warm_end_clean <- site_species_warm_end %>%
-  filter(!(Rel_Cover_initial == 0 & Rel_Cover_final == 0)) %>%
-  mutate(Rel_Cover_initial = ifelse(Rel_Cover_initial == 0 & Rel_Cover_final != 0, 0.00120, Rel_Cover_initial))
+# # Replace 0 with small value if species appears later (to enable log calculations)
+# site_species_warm_end_clean <- site_species_warm_end %>%
+#   filter(!(Rel_Cover_initial == 0 & Rel_Cover_final == 0)) %>%
+#   mutate(Rel_Cover_initial = ifelse(Rel_Cover_initial == 0 & Rel_Cover_final != 0, 0.00120, Rel_Cover_initial))
+# 
+# site_species_CO_end_clean <- site_species_CO_end %>%
+#   filter(!(Rel_Cover_initial == 0 & Rel_Cover_final == 0)) %>%
+#   mutate(Rel_Cover_initial = ifelse(Rel_Cover_initial == 0 & Rel_Cover_final != 0, 0.00120, Rel_Cover_initial))
 
-site_species_CO_end_clean <- site_species_CO_end %>%
-  filter(!(Rel_Cover_initial == 0 & Rel_Cover_final == 0)) %>%
-  mutate(Rel_Cover_initial = ifelse(Rel_Cover_initial == 0 & Rel_Cover_final != 0, 0.00120, Rel_Cover_initial))
-
-site_species_CD_end_clean <- site_species_CD_end %>%
-  filter(!(Rel_Cover_initial == 0 & Rel_Cover_final == 0)) %>%
-  mutate(Rel_Cover_initial = ifelse(Rel_Cover_initial == 0 & Rel_Cover_final != 0, 0.00120, Rel_Cover_initial))
+# site_species_CD_end_clean <- site_species_CD_end %>%
+#   filter(!(Rel_Cover_initial == 0 & Rel_Cover_final == 0)) %>%
+#   mutate(Rel_Cover_initial = ifelse(Rel_Cover_initial == 0 & Rel_Cover_final != 0, 0.00120, Rel_Cover_initial))
 
 #save outputs
-write.csv(site_species_warm_end_clean, "./intermediate data/site_species_warm_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
-write.csv(site_species_CO_end_clean, "./intermediate data/site_species_CO_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
-write.csv(site_species_CD_end_clean, "./intermediate data/site_species_CD_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
+# write.csv(site_species_warm_end_clean, "./intermediate data/site_species_warm_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
+# write.csv(site_species_CO_end_clean, "./intermediate data/site_species_CO_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
+# write.csv(site_species_CD_end_clean, "./intermediate data/site_species_CD_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
+
+write.csv(site_species_warm_end, "./intermediate data/site_species_warm_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
+write.csv(site_species_CO_end, "./intermediate data/site_species_CO_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
+write.csv(site_species_CD_end, "./intermediate data/site_species_CD_end_clean_rel_abund_cover_initial_final.csv", row.names = FALSE)
 ```
 
 #Final - initial Absolute abundance
